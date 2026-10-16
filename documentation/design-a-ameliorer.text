@@ -1,0 +1,152 @@
+DOCUMENT DE RECOMMANDATIONS DESIGN
+ERP BTP - Digital Chantier
+Date : 23 septembre 2026
+
+OBJECTIF
+Ameliorer la lisibilite, la rapidite d'utilisation et la perception de fiabilite de l'ERP, en priorite sur la page Referentiels et les composants communs.
+
+PRIORITE 1 - A CORRIGER EN PREMIER
+
+1. Clarifier la page Referentiels
+- Afficher un titre plus explicite : « Donnees de base » ou « Referentiels de l'entreprise ».
+- Ajouter un court resume de l'usage de la page et du nombre de referentiels disponibles.
+- Ajouter une action principale visible, par exemple « Ajouter un employe » ou « Ajouter une ressource ».
+- Afficher une icone differente par carte : employe, client, fournisseur, engin et materiau.
+- Ajouter une information utile sur chaque carte : nombre d'elements actifs, derniere mise a jour ou etat de la synchronisation.
+- Rendre toute la carte clairement interactive avec un etat hover et focus visibles.
+
+2. Ameliorer la hierarchie visuelle
+- Reduire la taille du titre tres present dans la barre superieure sur les petits ecrans.
+- Utiliser une echelle de titres constante entre tableau de bord, listes, formulaires et details.
+- Limiter les ombres et les effets de translation au survol pour garder une interface professionnelle.
+- Utiliser davantage d'espacement entre les sections et moins de bordures decoratives.
+- Donner plus de contraste aux titres, aux valeurs importantes et aux actions principales.
+
+3. Rendre les actions immediatement comprehensibles
+- Remplacer les liens d'action ambigus par des boutons avec icone et libelle : Voir, Modifier, Supprimer.
+- Ajouter une confirmation claire avant chaque suppression.
+- Afficher un etat de chargement pendant les appels API.
+- Afficher des messages de succes et d'erreur pres de l'action realisee.
+- Desactiver temporairement un bouton pendant l'envoi pour eviter les doubles soumissions.
+
+4. Ameliorer les tableaux de donnees
+- Garder la premiere colonne ou l'identifiant visible sur mobile lorsque le tableau defile horizontalement.
+- Ajouter un etat vide utile : illustration simple, explication et bouton de creation.
+- Ajouter une ligne de chargement skeleton au lieu d'un espace vide.
+- Aligner les montants a droite et afficher toujours l'unite « Ar ».
+- Utiliser des badges coherents pour les statuts et les rendre suffisamment contrastes.
+- Prevoir le tri sur les colonnes utiles et conserver la recherche visible.
+
+5. Repenser l'ecran de connexion avec un design 3D
+- Conserver la composition en deux panneaux : presentation de l'ERP a gauche et formulaire de connexion a droite.
+- S'inspirer de l'univers visuel de lovatech.mg pour l'immersion, la profondeur et la presentation moderne, sans copier ses textes, images ou elements proprietaires.
+- Ajouter sur le panneau de gauche une scene 3D legere composee de formes geometriques, cartes flottantes ou volumes representant les chantiers, les finances et les ressources.
+- Utiliser une perspective CSS, des ombres douces, des effets de profondeur et une lumiere animee avec moderation.
+- Ajouter une animation d'entree progressive : logo, titre, scene 3D, puis formulaire.
+- Ajouter un mouvement lent et continu aux elements 3D pour donner une impression de vie sans distraire l'utilisateur.
+- Prevoir un effet de reaction au mouvement de la souris uniquement sur ordinateur et avec une amplitude tres faible.
+- Garder le formulaire blanc, stable et tres lisible afin que l'effet 3D ne gene jamais la saisie.
+- Afficher le nom de l'entreprise et le sigle de marque dans la scene et dans le formulaire mobile.
+- Utiliser un bouton de connexion avec etat normal, chargement, succes et erreur.
+- Ajouter une version sans animation lorsque prefers-reduced-motion est active.
+- Desactiver ou simplifier la scene 3D sur mobile pour privilegier les performances et la lisibilite.
+
+PRIORITE 2 - EXPERIENCE MOBILE ET ACCESSIBILITE
+
+6. Corriger la navigation mobile
+- La barre laterale devient actuellement une ligne d'icones peu explicite : prevoir un bouton de menu ou une navigation basse mieux identifiee.
+- Conserver le libelle du lien actif sur mobile ou afficher un tooltip accessible.
+- Eviter que la topbar et les actions se compressent sur les ecrans etroits.
+- Passer les boutons d'action en pleine largeur dans les formulaires mobiles.
+- Tester les tableaux, formulaires et fenetres de notification a 320 px, 375 px et 430 px.
+
+7. Renforcer l'accessibilite
+- Ajouter un style :focus-visible tres visible sur les liens, boutons, champs et cartes.
+- Ne pas utiliser la couleur seule pour distinguer un statut : ajouter un libelle ou une icone.
+- Verifier un contraste minimum WCAG AA pour les textes secondaires et les badges.
+- Associer correctement chaque champ a son label et afficher les erreurs sous le champ concerne.
+- Respecter prefers-reduced-motion pour les animations d'apparition et de survol.
+- Ajouter des textes alternatifs aux logos et des aria-labels aux boutons uniquement iconographiques.
+
+8. Ameliorer la saisie des donnees
+- Regrouper les champs longs par sections : identite, contact, informations administratives.
+- Afficher les champs obligatoires avant la saisie et non seulement apres une erreur.
+- Ajouter des exemples dans les placeholders uniquement quand ils apportent une aide reelle.
+- Utiliser les claviers mobiles adaptes pour telephone, email et montants.
+- Formater les montants en Ariary sans empecher la saisie ou la correction.
+
+PRIORITE 3 - COHERENCE GRAPHIQUE
+
+9. Stabiliser la charte graphique
+- Conserver le bleu comme couleur d'action, mais ajouter une couleur secondaire discrete pour les informations et les elements positifs.
+- Definir dans les variables CSS les couleurs de fond, de bordure, de texte, d'information, de succes, d'avertissement et d'erreur.
+- Limiter chaque ecran a une action principale et une action secondaire.
+- Uniformiser les rayons de bordure, les hauteurs de boutons et les espacements.
+- Eviter les titres en capitales ou les espacements de lettres excessifs dans les tableaux.
+- Choisir une typographie principale plus distinctive, tout en conservant une excellente lisibilite sur le terrain.
+
+10. Donner plus de sens aux cartes Referentiels
+- Utiliser une petite zone d'icone ou de couleur par type de ressource.
+- Mettre en avant la valeur principale : nombre actif, dernier ajout ou alerte.
+- Ajouter un lien secondaire discret vers « Voir la liste » si la carte comporte plusieurs actions.
+- Afficher un etat visuel lorsqu'un referentiel est vide ou indisponible.
+- Eviter de repeter le meme texte « Gerer les... » sur toutes les cartes.
+
+11. Ameliorer les retours systeme
+- Differencier visuellement chargement, succes, avertissement, erreur et absence de donnees.
+- Utiliser des notifications temporaires pour les succes simples et des messages persistants pour les erreurs.
+- Donner une explication exploitable en cas d'erreur API, avec une action « Reessayer ».
+- Indiquer la date ou l'heure de derniere actualisation des donnees quand cela est utile.
+
+CONTENU A AJOUTER SUR LA PAGE REFERENTIELS
+
+Titre : « Donnees de base »
+Sous-titre : « Retrouvez et gerez les ressources utilisees dans vos chantiers. »
+Indicateur : « 5 referentiels disponibles »
+Actions possibles : « Ajouter un employe », « Ajouter un client », « Ajouter un fournisseur », « Ajouter un engin », « Ajouter un materiau ».
+Cartes recommandees :
+- Employes : effectif actif et taux journaliers.
+- Clients : clients actifs et contacts recents.
+- Fournisseurs : fournisseurs actifs et categories.
+- Engins : engins disponibles et engins en maintenance.
+- Materiaux : articles actifs et alertes de stock.
+
+CONTENU A AJOUTER SUR L'ECRAN DE CONNEXION
+
+Direction artistique : « chantier numerique en profondeur ».
+Panneau gauche :
+- Fond bleu profond avec lumiere en degrade et grille ou lignes techniques tres discretes.
+- Scene 3D abstraite inspiree des plans, volumes de batiment, cartes de suivi et indicateurs financiers.
+- Elements flottants avec profondeur differenciee, ombres douces et animation lente.
+- Message principal : « Pilotez vos chantiers, en toute transparence. »
+- Trois ou quatre avantages maximum pour conserver une lecture rapide.
+
+Panneau droit :
+- Formulaire blanc, compact et centre verticalement.
+- Titre « Bienvenue » et sous-titre court.
+- Champs avec bordure nette, focus bleu visible et libelles toujours presents.
+- Bouton principal avec icone de connexion et retour visuel pendant l'envoi.
+- Message d'erreur visible sous les champs sans deplacement brutal du formulaire.
+
+ANIMATIONS DU LOGIN
+
+- Apparition : 500 a 700 ms, avec decalage leger entre les elements.
+- Scene 3D : mouvement lent de 8 a 15 secondes, sans clignotement.
+- Survol : translation ou rotation maximale de 2 a 4 degres.
+- Souris : effet de parallaxe limite a quelques pixels, uniquement sur grand ecran.
+- Mobile : pas de parallaxe et scene 3D simplifiee.
+- Accessibilite : toutes les animations doivent etre reduites avec prefers-reduced-motion.
+
+ORDRE DE REALISATION CONSEILLE
+
+1. Refaire l'ecran de connexion avec la scene 3D et ses animations.
+2. Corriger l'affichage mobile et les styles de focus.
+3. Ajouter les etats chargement, vide, succes et erreur.
+4. Repenser les cartes de la page Referentiels avec icones et indicateurs.
+5. Uniformiser boutons, badges, formulaires et tableaux.
+6. Ajouter tri, filtres et actions rapides aux listes.
+7. Faire un test visuel sur ordinateur, tablette et telephone.
+
+CRITERE DE VALIDATION DESIGN
+
+Un utilisateur doit pouvoir ouvrir l'ecran de connexion, comprendre immediatement l'identite de l'ERP, saisir ses identifiants sans distraction et recevoir un retour clair en cas d'erreur. La scene 3D doit rester decorative, legere et non bloquante. Depuis Referentiels, l'utilisateur doit identifier la ressource recherchee en moins de cinq secondes, comprendre son etat, puis acceder a la liste ou au formulaire de creation sans chercher les actions. Toutes les actions doivent rester utilisables au clavier et sur mobile.

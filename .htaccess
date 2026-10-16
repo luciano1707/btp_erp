@@ -1,0 +1,22 @@
+# =========================================================
+#  Digital Chantier - Regles Apache (racine du projet)
+# =========================================================
+
+# Empecher le listage des dossiers
+Options -Indexes
+
+# --- Protection des fichiers sensibles servis a la racine ---
+# .env, fichiers caches, console CLI, journaux... ne doivent JAMAIS etre accessibles via le web.
+<FilesMatch "(^\.|\.env|\.md$|\.log$|^cli\.php$|composer\.(json|lock))">
+    Require all denied
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Servir directement les fichiers/dossiers reels (assets, images, css, js)
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    # Tout le reste passe par le front controller
+    RewriteRule ^ index.php [QSA,L]
+</IfModule>

@@ -1,0 +1,25 @@
+# Environnement (contient des secrets)
+/.env
+
+# Journaux applicatifs
+/storage/logs/*.log
+
+# Dependances eventuelles
+/vendor/
+
+# Fichiers systeme
+.DS_Store
+Thumbs.db
+
+# Editeurs
+/.idea/
+/.vscode/
+*.swp
+
+# Sauvegardes SQL
+/storage/backups/*.sql
+
+# Logos / fichiers televerses (donnees, hors code)
+/assets/uploads/*
+!/assets/uploads/.gitkeep
+!/assets/uploads/.htaccess
