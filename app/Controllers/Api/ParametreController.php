@@ -4,7 +4,6 @@ namespace App\Controllers\Api;
 
 use App\Core\Audit;
 use App\Core\Controller;
-use App\Core\Env;
 use App\Core\Request;
 use App\Core\Response;
 use App\Models\Parametre;
@@ -42,7 +41,7 @@ final class ParametreController extends Controller
 
         $logo = $tous['entreprise_logo'] ?? null;
         $donnees['entreprise_logo'] = $logo;
-        $donnees['logo_url'] = $logo ? rtrim((string) Env::get('APP_URL', ''), '/') . '/assets/' . ltrim($logo, '/') : null;
+        $donnees['logo_url'] = $logo ? \base_url() . '/assets/' . ltrim($logo, '/') : null;
 
         Response::succes($donnees, 'Parametres de l\'entreprise');
     }
@@ -110,7 +109,7 @@ final class ParametreController extends Controller
 
         Response::succes([
             'entreprise_logo' => $relatif,
-            'logo_url'        => rtrim((string) Env::get('APP_URL', ''), '/') . '/assets/' . $relatif,
+            'logo_url'        => \base_url() . '/assets/' . $relatif,
         ], 'Logo mis a jour.');
     }
 

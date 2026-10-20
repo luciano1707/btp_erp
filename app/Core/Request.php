@@ -36,6 +36,13 @@ final class Request
         $this->requete = $_GET;
         $this->entetes = $this->extraireEntetes();
         $this->corps   = $this->extraireCorps();
+
+        if ($this->methode === 'POST' && Env::get('APP_DESKTOP', false)) {
+            $methodeRemplacee = strtoupper($this->entete('x-http-method-override', '') ?? '');
+            if (in_array($methodeRemplacee, ['PUT', 'PATCH', 'DELETE'], true)) {
+                $this->methode = $methodeRemplacee;
+            }
+        }
     }
 
     /**

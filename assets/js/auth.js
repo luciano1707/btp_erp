@@ -20,6 +20,12 @@ window.Auth = (function () {
         options.headers = Object.assign({ 'Accept': 'application/json' }, options.headers || {});
         options.credentials = 'same-origin';
 
+        const methode = (options.method || 'GET').toUpperCase();
+        if (window.APP_DESKTOP && ['PUT', 'PATCH', 'DELETE'].includes(methode)) {
+            options.method = 'POST';
+            options.headers['X-HTTP-Method-Override'] = methode;
+        }
+
         // Corps JSON, sauf pour les envois de fichiers (FormData : le navigateur gere l'en-tete)
         if (options.body && typeof options.body === 'object' && !(options.body instanceof FormData)) {
             options.headers['Content-Type'] = 'application/json';

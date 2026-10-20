@@ -58,16 +58,16 @@
         }).join('');
 
         const av = c.stats.avancement_global;
-        document.getElementById('jauge-globale').style.width = av + '%';
-        document.getElementById('avancement-valeur').textContent = av + ' %';
-        document.getElementById('stat-nb-lots').textContent = c.stats.nb_lots;
         if (peutVoirFinances) {
+            document.getElementById('jauge-globale').style.width = av + '%';
+            document.getElementById('avancement-valeur').textContent = av + ' %';
+            document.getElementById('stat-nb-lots').textContent = c.stats.nb_lots;
             document.getElementById('stat-budget-prev').textContent = Format.ariary(c.budget_previsionnel);
             document.getElementById('stat-budget-lots').textContent = Format.ariary(c.stats.budget_lots);
-        document.getElementById('stat-cout-mo').textContent = Format.ariary(c.stats.cout_main_oeuvre);
-        document.getElementById('stat-cout-mat').textContent = Format.ariary(c.stats.cout_materiaux);
-        document.getElementById('stat-cout-total').textContent = Format.ariary(c.stats.cout_total);
-        document.getElementById('stat-reste').textContent = c.stats.reste_budget === null ? '—' : Format.ariary(c.stats.reste_budget);
+            document.getElementById('stat-cout-mo').textContent = Format.ariary(c.stats.cout_main_oeuvre);
+            document.getElementById('stat-cout-mat').textContent = Format.ariary(c.stats.cout_materiaux);
+            document.getElementById('stat-cout-total').textContent = Format.ariary(c.stats.cout_total);
+            document.getElementById('stat-reste').textContent = c.stats.reste_budget === null ? '—' : Format.ariary(c.stats.reste_budget);
         }
 
         // Donut repartition des couts

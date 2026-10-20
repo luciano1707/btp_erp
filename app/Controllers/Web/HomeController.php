@@ -14,6 +14,10 @@ final class HomeController extends Controller
 {
     public function index(Request $requete): void
     {
+        if (Env::get('APP_DESKTOP', false) === true) {
+            Response::rediriger(\url('/connexion'));
+        }
+
         Response::vue('accueil', [
             'titre'       => 'Accueil',
             'application' => Env::get('APP_NAME', 'Digital Chantier'),

@@ -31,6 +31,10 @@ if (!function_exists('base_url')) {
      */
     function base_url(): string
     {
+        if (\App\Core\Env::get('APP_DESKTOP', false) === true) {
+            return '';
+        }
+
         return rtrim((string) \App\Core\Env::get('APP_URL', ''), '/');
     }
 }

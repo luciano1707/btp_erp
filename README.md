@@ -18,10 +18,9 @@ Ariary, chaque heure de chantier.
 
 ```
 BTP_ERP/
-├── public/                 ← racine web (à pointer sur Simafri)
-│   ├── index.php           ← front controller unique
-│   ├── .htaccess           ← réécriture d'URL
-│   └── assets/             ← css, js
+├── index.php               ← front controller unique et racine web
+├── .htaccess               ← réécriture d'URL
+├── assets/                  ← css, js, images téléversées
 ├── app/
 │   ├── Core/               ← socle maison (Router, Request, Response, Database, Jwt, Audit…)
 │   ├── Controllers/
@@ -40,19 +39,72 @@ BTP_ERP/
 
 ## Installation / test (local XAMPP)
 
-1. Démarrer Apache + MySQL dans XAMPP.
-2. Copier `.env.example` en `.env` et vérifier les identifiants MySQL.
-3. Appliquer les migrations :
+Chaque développeur peut utiliser sa propre base locale. Les migrations créent le schéma
+identique sur chaque poste ; il n'est pas nécessaire de s'envoyer un export SQL. Les données
+de démonstration sont facultatives et ne doivent pas contenir de données réelles ou sensibles.
+
+### Sur Windows
+
+1. Installer Git, XAMPP (PHP 8.2+ et MySQL/MariaDB) et Composer.
+2. Cloner le dépôt dans `C:\xampp\htdocs\BTP_ERP` :
    ```bash
-   /Applications/XAMPP/xamppfiles/bin/php cli.php migrate
+   git clone <URL_DU_DEPOT_GITHUB> C:\xampp\htdocs\BTP_ERP
    ```
-4. Ouvrir **http://localhost/BTP_ERP/public/** dans le navigateur.
-   La page d'accueil interroge l'API et affiche l'état du socle.
+3. Démarrer Apache et MySQL dans XAMPP, puis ouvrir PowerShell dans le dossier du projet.
+4. Créer la configuration locale et installer les dépendances :
+   ```powershell
+   Copy-Item .env.example .env
+   composer install
+   ```
+5. Vérifier dans `.env` les paramètres `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER` et `DB_PASS`.
+   Pour la configuration XAMPP locale par défaut, ils sont généralement `127.0.0.1`, `3306`,
+   `btp_erp`, `root` et un mot de passe vide. Le compte MySQL doit pouvoir créer la base ;
+   sinon, créez `btp_erp` dans phpMyAdmin avant de lancer les migrations.
+6. Appliquer les migrations et créer le compte de démonstration :
+   ```powershell
+   php cli.php migrate
+   php cli.php seed
+   ```
+   Si `php` n'est pas dans le `PATH`, utilisez `C:\xampp\php\php.exe` à la place de `php`.
+   Pour charger aussi les données métier de démonstration, lancez `php cli.php demo`.
+7. Ouvrir **http://localhost/BTP_ERP/** dans le navigateur.
+
+### Générer le paquet desktop Windows (PHP Desktop)
+
+Le paquet desktop réutilise les mêmes pages PHP dans une fenêtre Windows. Le runtime PHP
+Desktop embarque PHP 8.3 et son navigateur ; MySQL reste fourni par XAMPP et doit tourner
+localement sur le PC. Ce paquet de développement n'est pas un installateur et ne partage pas
+automatiquement les bases de données entre ordinateurs.
+
+Depuis PowerShell, à la racine du dépôt, avec MySQL XAMPP démarré et Composer
+installé, générez le paquet et initialisez la base locale de démonstration :
+
+```powershell
+.\desktop\build.ps1 -RunMigrations
+```
+
+Le script télécharge PHP Desktop Chrome 130.1 depuis sa publication officielle, assemble les
+fichiers nécessaires sans reprendre votre `.env` local, les journaux, les fichiers téléversés ni
+l'export SQL. Il génère une configuration `.env` depuis `.env.example`, installe les dépendances
+Composer, active les extensions PHP requises par les vues et applique les migrations. Il crée le paquet dans un nouveau dossier
+`desktop\build\DigitalChantier-<date>` ; ces fichiers générés sont exclus de Git. Le compte de
+démonstration est `directeur@digitalchantier.mg` / `Directeur@2026` (à changer après connexion).
+Pour construire sans toucher à la base, omettez `-RunMigrations`, puis adaptez le fichier
+`.env` du paquet et lancez ses migrations manuellement avec le `php.exe` embarqué.
+
+Lancez `phpdesktop-chrome.exe` à la racine du paquet : en mode desktop, l'ouverture de la
+racine redirige directement vers l'écran de connexion. Chaque développeur doit générer son
+propre paquet et garde sa propre configuration `.env` et sa base locale. Le runtime est
+volumineux et n'est pas versionné dans Git ; le collègue clone le dépôt puis exécute le même
+script sur son PC Windows 10 ou supérieur.
+Le serveur local PHP Desktop traite mal les requêtes `PUT`, `PATCH` et `DELETE` ; le client
+desktop les envoie donc en `POST` avec `X-HTTP-Method-Override`. Cette surcharge n'est activée
+que lorsque `APP_DESKTOP=true` et ne change pas les requêtes de l'application web.
 
 ### Vérifier l'API directement
 
 ```bash
-curl http://localhost/BTP_ERP/public/api/v1/health
+curl http://localhost/BTP_ERP/api/v1/health
 ```
 
 Réponse attendue :

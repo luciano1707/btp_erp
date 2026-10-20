@@ -6,6 +6,7 @@
 
 # Dependances eventuelles
 /vendor/
+/desktop/build/
 
 # Fichiers systeme
 .DS_Store

@@ -68,6 +68,7 @@ function icone(string $nom): string
     </style>
     <script>
         window.APP_BASE = <?= json_encode(base_url()) ?>;
+        window.APP_DESKTOP = <?= json_encode((bool) \App\Core\Env::get('APP_DESKTOP', false)) ?>;
         <?php if (!empty($config_json)): ?>
         window.RESSOURCE = <?= json_encode($config_json, JSON_UNESCAPED_UNICODE) ?>;
         <?php endif; ?>

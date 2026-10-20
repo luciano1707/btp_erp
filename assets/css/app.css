@@ -533,7 +533,10 @@ th.triable.tri-asc, th.triable.tri-desc { color: var(--primaire); }
 }
 .modal-carte h3 { margin: 0 0 8px; font-size: 1.15rem; }
 .modal-carte p { margin: 0 0 20px; color: var(--texte-doux); font-size: .94rem; }
+.modal-carte .champ { margin-top: 14px; }
+.modal-carte .actions-form { justify-content: flex-end; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+.stock-notice { margin: 0 0 16px; padding: 11px 13px; border-radius: var(--rayon-sm); background: var(--succes-bg); color: var(--succes); font-size: .9rem; }
 
 /* --- Listes de definitions / profil --- */
 .profil { display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; margin: 0 0 16px; }

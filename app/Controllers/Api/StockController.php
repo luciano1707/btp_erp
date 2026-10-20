@@ -40,7 +40,7 @@ final class StockController extends Controller
         $donnees = $this->valider($requete->tout(), [
             'materiau_id' => 'requis|entier',
             'type'        => 'requis|dans:entree,sortie,ajustement',
-            'quantite'    => 'requis|numerique|min:0',
+            'quantite'    => 'requis|numerique|min:0.001',
         ]);
 
         if ((new Materiau())->trouver((int) $donnees['materiau_id']) === null) {
