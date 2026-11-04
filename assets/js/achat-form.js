@@ -43,7 +43,7 @@
             return '<option value="' + m.id + '" data-prix="' + (m.prix_unitaire || 0) + '" data-lib="' + Format.echapper(m.designation) + '">' + Format.echapper(m.designation) + '</option>';
         }).join('');
         tr.innerHTML =
-            '<td><select class="l-materiau">' + options + '</select></td>' +
+            '<td><select class="l-materiau" data-recherche>' + options + '</select></td>' +
             '<td><input class="l-designation" type="text"></td>' +
             '<td><input class="l-quantite" type="number" min="0" step="0.001" value="1" style="width:90px"></td>' +
             '<td><input class="l-prix" type="number" min="0" value="0" style="width:110px"></td>' +

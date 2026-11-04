@@ -9,7 +9,10 @@ ob_start();
     <div class="actions-entete">
         <a class="bouton bouton-secondaire" href="<?= e(url('/devis')) ?>">&larr; Liste</a>
         <a class="bouton bouton-secondaire" id="lien-imprimer" href="#">Imprimer</a>
-        <button class="bouton bouton-secondaire" id="btn-envoyer" type="button" hidden>Marquer envoye</button>
+        <button class="bouton bouton-secondaire" id="btn-export-pdf" type="button" hidden>Export PDF</button>
+        <button class="bouton bouton-secondaire" id="btn-envoyer" type="button" hidden>Soumettre au directeur</button>
+        <button class="bouton bouton-primaire" id="btn-accepter" type="button" hidden>Accepter</button>
+        <button class="btn btn-rouge" id="btn-refuser" type="button" hidden>Refuser</button>
         <button class="bouton bouton-primaire" id="btn-facturer" type="button" hidden>Facturer</button>
     </div>
 </section>
@@ -33,5 +36,10 @@ $contenu = ob_get_clean();
 View::rendre('layouts.base', [
     'titre' => $titre, 'contenu' => $contenu,
     'scripts' => ['js/auth.js', 'js/format.js', 'js/devis-detail.js'],
-    'config_json' => ['id' => $id, 'peutValider' => $peutValider ?? false],
+    'config_json' => [
+        'id' => $id,
+        'peutSoumettre' => $peutSoumettre ?? false,
+        'peutValider' => $peutValider ?? false,
+        'peutFacturer' => $peutFacturer ?? false,
+    ],
 ]);

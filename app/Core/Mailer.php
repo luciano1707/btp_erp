@@ -10,6 +10,22 @@ final class Mailer
     public static function envoyerCodeOtp(string $destinataire, string $code): bool
     {
         $nomApp = (string) Env::get('APP_NAME', 'Digital Chantier');
+        $sujet = 'Code de réinitialisation - ' . $nomApp;
+        $message = "Bonjour,\n\nVotre code de réinitialisation est : $code\n\n"
+            . "Ce code expire dans 15 minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.\n\n"
+            . $nomApp;
+
+        return self::envoyerMessage($destinataire, $sujet, $message);
+    }
+
+    public static function envoyerNotification(string $destinataire, string $sujet, string $message): bool
+    {
+        return self::envoyerMessage($destinataire, $sujet, $message);
+    }
+
+    private static function envoyerMessage(string $destinataire, string $sujet, string $message): bool
+    {
+        $nomApp = (string) Env::get('APP_NAME', 'Digital Chantier');
         $expediteur = trim((string) Env::get('MAIL_FROM', ''));
         $nomExpediteur = (string) Env::get('MAIL_FROM_NAME', $nomApp);
         $hote = trim((string) Env::get('MAIL_HOST', ''));
@@ -36,16 +52,6 @@ final class Mailer
             Logger::avertissement('MAIL_FROM different du compte SMTP Gmail ; utilisation du compte authentifie.');
             $expediteur = $utilisateur;
         }
-
-        if (filter_var($expediteur, FILTER_VALIDATE_EMAIL) === false) {
-            Logger::erreur('MAIL_FROM doit etre une adresse e-mail valide.');
-            return false;
-        }
-
-        $sujet = 'Code de réinitialisation - ' . $nomApp;
-        $message = "Bonjour,\n\nVotre code de réinitialisation est : $code\n\n"
-            . "Ce code expire dans 15 minutes. Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.\n\n"
-            . $nomApp;
 
         try {
             $mail = new PHPMailer(true);

@@ -47,6 +47,10 @@ final class App
         $web = require $this->racine . '/routes/web.php';
         $api($this->router);
         $web($this->router);
+        // Redirection legacy : /pointages -> /chantiers (le pointage se fait par chantier)
+        $this->router->get('/pointages', static function (Request $requete): void {
+            \App\Core\Response::rediriger(url('/chantiers'));
+        });
     }
 
     public function executer(): void

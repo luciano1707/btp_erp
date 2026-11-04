@@ -3,9 +3,11 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../core/api_client.dart';
 import '../../shared/app_theme.dart';
+import '../../shared/widgets.dart';
 import '../profile/profile_screen.dart';
 import 'api_module_screen.dart';
 import 'module_catalog.dart';
+import 'notifications_screen.dart';
 
 class ModulesHub extends StatelessWidget {
   const ModulesHub({
@@ -90,12 +92,16 @@ class ModulesHub extends StatelessWidget {
         ]),
         _section(context, 'EXPLOITATION', [
           if (_moduleAllowed('achats')) _moduleLink(context, 'achats'),
+          if (_moduleAllowed('demandes-materiel'))
+            _moduleLink(context, 'demandes-materiel'),
           if (_moduleAllowed('stock'))
             _ModuleLink(
               title: 'Stock',
               icon: Icons.inventory_2_outlined,
               onTap: () => onSelectTab(2),
             ),
+          if (_moduleAllowed('rapports-journaliers'))
+            _moduleLink(context, 'rapports-journaliers'),
         ]),
         _section(context, 'COMMERCIAL', [
           if (_moduleAllowed('devis') || _moduleAllowed('factures'))
@@ -106,6 +112,29 @@ class ModulesHub extends StatelessWidget {
             ),
           if (_moduleAllowed('devis')) _moduleLink(context, 'devis'),
           if (_moduleAllowed('factures')) _moduleLink(context, 'factures'),
+        ]),
+        _section(context, 'GESTION FINANCIÈRE', [
+          if (_moduleAllowed('depenses')) _moduleLink(context, 'depenses'),
+          if (_moduleAllowed('budgets')) _moduleLink(context, 'budgets'),
+        ]),
+        _section(context, 'SUIVI DE CHANTIER', [
+          if (_moduleAllowed('rfi')) _moduleLink(context, 'rfi'),
+          if (_moduleAllowed('qualite')) _moduleLink(context, 'qualite'),
+          if (_moduleAllowed('securite')) _moduleLink(context, 'securite'),
+          if (_moduleAllowed('incidents')) _moduleLink(context, 'incidents'),
+        ]),
+        _section(context, 'COMMUNICATION', [
+          if (_allowed('notifications'))
+            _ModuleLink(
+              title: 'Notifications',
+              icon: Icons.notifications_none_outlined,
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute<void>(
+                  builder: (_) => NotificationsScreen(api: api),
+                ),
+              ),
+            ),
         ]),
         _section(context, 'DONNÉES', [
           if (_allowed('referentiels'))
@@ -152,6 +181,11 @@ class ModulesHub extends StatelessWidget {
       switch (permission) {
         'finances' => role == 'comptable',
         'referentiels' => [
+          'chef_chantier',
+          'comptable',
+          'magasinier',
+        ].contains(role),
+        'notifications' => [
           'chef_chantier',
           'comptable',
           'magasinier',
@@ -313,14 +347,17 @@ class _CarteReferentiel extends StatelessWidget {
     borderRadius: BorderRadius.circular(16),
     child: Container(
       padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Row(
         children: [
           Container(
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              color: const Color(0xFFE8F0D8),
+              color: AppColors.lime,
               borderRadius: BorderRadius.circular(13),
             ),
             child: Icon(module.icon, color: AppColors.forest),
@@ -494,7 +531,7 @@ class _FinanceValue extends StatelessWidget {
         color: highlight ? AppColors.forest : AppColors.ink,
       ),
     ),
-    tileColor: highlight ? const Color(0xFFE8F0D8) : Colors.white,
+    tileColor: highlight ? AppColors.lime : Colors.white,
   );
 }
 
@@ -523,6 +560,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _saving = false;
   bool _uploadingLogo = false;
   String? _logoUrl;
+  String? _loadError;
 
   @override
   void initState() {
@@ -531,14 +569,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
     try {
       final data = await widget.api.getData('parametres') as Map;
+      if (!mounted) return;
+      _logoUrl = data['logo_url']?.toString();
       for (final key in _keys) {
-        _logoUrl = data['logo_url']?.toString();
-        _controllers[key] = TextEditingController(
-          text: data[key]?.toString() ?? '',
-        );
+        final value = data[key]?.toString() ?? '';
+        final controller = _controllers[key];
+        if (controller == null) {
+          _controllers[key] = TextEditingController(text: value);
+        } else {
+          controller.text = value;
+        }
       }
+    } catch (error) {
+      if (mounted) setState(() => _loadError = error.toString());
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -557,6 +606,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     appBar: AppBar(title: const Text('Paramètres entreprise')),
     body: _loading
         ? const Center(child: CircularProgressIndicator())
+        : _loadError != null
+        ? ErrorPanel(message: _loadError!, onRetry: _load)
         : ListView(
             padding: const EdgeInsets.all(16),
             children: [

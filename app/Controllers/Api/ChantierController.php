@@ -6,10 +6,12 @@ use App\Core\Request;
 use App\Core\ResourceController;
 use App\Core\Response;
 use App\Core\Access;
+use App\Core\ValidationService;
 use App\Models\Achat;
 use App\Models\Chantier;
 use App\Models\Lot;
 use App\Models\Pointage;
+use RuntimeException;
 
 /**
  * API CRUD des chantiers.
@@ -51,6 +53,53 @@ final class ChantierController extends ResourceController
             Response::erreur('Seul le directeur peut cloturer ou annuler un chantier.', 403);
         }
         return $donnees;
+    }
+
+    /**
+     * PUT /api/v1/chantiers/{id}
+     * Les modifications sensibles du chef de chantier (dates, statut) sont
+     * soumises au directeur et ne sont appliquees qu'apres validation.
+     */
+    public function update(Request $requete): void
+    {
+        $role = $requete->auth['role'] ?? null;
+        if ($role !== 'chef_chantier') {
+            parent::update($requete);
+            return;
+        }
+
+        $id = (int) $requete->params['id'];
+        $existant = $this->chantier->trouver($id);
+        if ($existant === null) {
+            Response::erreur('Chantier introuvable.', 404);
+        }
+
+        $autorises = ['responsable_id', 'localisation', 'date_fin_reelle', 'statut', 'description'];
+        $entree = array_intersect_key($requete->tout(), array_flip($autorises));
+        $donnees = $this->valider($entree, array_intersect_key($this->reglesCreation, $entree));
+        $valeurs = $this->filtrer($donnees);
+
+        $sensibles = array_intersect(array_keys($valeurs), ['date_fin_reelle', 'statut']);
+        if ($sensibles === []) {
+            parent::update($requete);
+            return;
+        }
+
+        try {
+            $validation = (new ValidationService())->soumettre([
+                'type_operation' => 'chantier_modification',
+                'operation_id' => $id,
+                'soumetteur_id' => $this->utilisateurId($requete),
+                'meta' => ['changements' => $valeurs],
+            ]);
+        } catch (RuntimeException $e) {
+            Response::erreur($e->getMessage(), 409);
+        }
+
+        Response::succes([
+            'validation' => $validation,
+            'chantier' => $this->presenter($existant, $requete),
+        ], 'Modification sensible soumise a la validation du directeur.', 202);
     }
 
     /** GET /api/v1/chantiers : liste avec noms client/responsable. */

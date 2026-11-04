@@ -6,6 +6,10 @@ ob_start();
 ?>
 <section class="entete-liste">
     <div><h1>Stock</h1><p class="sous-titre description-liste">Suivez les niveaux de materiaux et identifiez rapidement les seuils a reapprovisionner.</p><p class="sous-titre" id="compteur">Chargement&hellip;</p></div>
+    <div class="groupe-export">
+        <button class="bouton bouton-export" type="button" onclick="exporter('pdf')">📄 PDF</button>
+        <button class="bouton bouton-export bouton-export-excel" type="button" onclick="exporter('xlsx')">📊 Excel</button>
+    </div>
 </section>
 <div class="barre-recherche">
     <label class="champ-recherche">
@@ -51,5 +55,5 @@ View::rendre('layouts.base', [
     'titre'   => $titre,
     'contenu' => $contenu,
     'scripts'     => ['js/auth.js', 'js/format.js', 'js/stock.js'],
-    'config_json' => ['peutEcrire' => !empty($peutEcrire)],
+    'config_json' => ['peutEcrire' => !empty($peutEcrire), 'validations' => $validations ?? []],
 ]);

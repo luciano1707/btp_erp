@@ -69,7 +69,7 @@ final class Facture extends DocumentModel
             return;
         }
 
-        $reqPaye = $this->db()->prepare('SELECT COALESCE(SUM(montant),0) FROM paiements WHERE facture_id = :id');
+        $reqPaye = $this->db()->prepare("SELECT COALESCE(SUM(montant),0) FROM paiements WHERE facture_id = :id AND statut = 'valide'");
         $reqPaye->execute([':id' => $id]);
         $paye = (int) $reqPaye->fetchColumn();
         $ttc = (int) $facture['montant_ttc'];

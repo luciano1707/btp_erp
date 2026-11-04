@@ -6,8 +6,10 @@ use App\Core\Audit;
 use App\Core\Controller;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\ValidationService;
 use App\Models\Devis;
 use App\Models\Facture;
+use RuntimeException;
 
 /** API des devis (Phase 6). */
 final class DevisController extends Controller
@@ -60,18 +62,89 @@ final class DevisController extends Controller
         Response::succes((new Devis())->trouverAvecLignes($id), 'Devis enregistre.', 201);
     }
 
-    /** PUT /api/v1/devis/{id}/statut  (change de statut : envoye / accepte / refuse) */
+    /**
+     * PUT /api/v1/devis/{id}/statut
+     * Les transitions envoye / accepte / refuse passent par le workflow central
+     * (soumission puis decision), afin d'empecher toute validation directe.
+     */
     public function changerStatut(Request $requete): void
     {
         $id = (int) $requete->params['id'];
         $modele = new Devis();
-        if ($modele->trouver($id) === null) {
+        $devis = $modele->trouver($id);
+        if ($devis === null) {
             Response::erreur('Devis introuvable.', 404);
         }
         $donnees = $this->valider($requete->tout(), ['statut' => 'requis|dans:brouillon,envoye,accepte,refuse']);
-        $modele->modifier($id, ['statut' => $donnees['statut']]);
-        Audit::enregistrer('devis.statut', 'devis', $id, ['statut' => $donnees['statut']], $this->uid($requete));
-        Response::succes(null, 'Statut du devis mis a jour.');
+        $statut = (string) $donnees['statut'];
+
+        if ($statut === 'brouillon') {
+            if (!in_array($devis['statut'], ['brouillon', 'refuse'], true)) {
+                Response::erreur('Un devis valide ne peut pas revenir en brouillon.', 409);
+            }
+            $modele->modifier($id, ['statut' => 'brouillon']);
+            Response::succes(null, 'Devis remis en brouillon.');
+        }
+
+        $service = new ValidationService();
+        try {
+            $validation = $service->trouverParOperation('devis', $id);
+            $soumetteur = (int) ($devis['cree_par'] ?? 0);
+            if ($validation === null || $validation['statut'] !== 'en_attente') {
+                if (in_array($devis['statut'], ['accepte', 'refuse'], true)) {
+                    Response::erreur('Ce devis a deja fait l\'objet d\'une decision.', 409);
+                }
+                $validation = $service->soumettre([
+                    'type_operation' => 'devis',
+                    'operation_id' => $id,
+                    'soumetteur_id' => $soumetteur,
+                ]);
+            }
+
+            if ($statut === 'envoye') {
+                Response::succes($validation, 'Devis soumis au directeur.');
+            }
+
+            $service->decider(
+                (int) $validation['id'],
+                (int) $this->uid($requete),
+                (string) ($requete->auth['role'] ?? ''),
+                $statut === 'accepte',
+                $statut === 'refuse' ? 'Refus commercial du devis' : null
+            );
+        } catch (RuntimeException $e) {
+            $code = str_contains($e->getMessage(), 'auto-validation') || str_contains($e->getMessage(), 'autorise')
+                ? 403
+                : 409;
+            Response::erreur($e->getMessage(), $code);
+        }
+
+        Response::succes($modele->trouver($id), 'Statut du devis mis a jour.');
+    }
+
+    /** POST /api/v1/devis/{id}/soumettre - soumission au directeur. */
+    public function soumettre(Request $requete): void
+    {
+        $id = (int) $requete->params['id'];
+        $devis = (new Devis())->trouver($id);
+        if ($devis === null) {
+            Response::erreur('Devis introuvable.', 404);
+        }
+        if (!in_array($devis['statut'], ['brouillon', 'refuse'], true)) {
+            Response::erreur('Ce devis ne peut pas etre soumis dans son etat actuel.', 409);
+        }
+
+        try {
+            $validation = (new ValidationService())->soumettre([
+                'type_operation' => 'devis',
+                'operation_id' => $id,
+                'soumetteur_id' => $this->uid($requete),
+            ]);
+        } catch (RuntimeException $e) {
+            Response::erreur($e->getMessage(), 409);
+        }
+
+        Response::succes($validation, 'Devis soumis au directeur.');
     }
 
     /** POST /api/v1/devis/{id}/facturer : cree une facture a partir du devis. */
@@ -82,8 +155,10 @@ final class DevisController extends Controller
         if ($devis === null) {
             Response::erreur('Devis introuvable.', 404);
         }
-        if ($devis['statut'] === 'refuse') {
-            Response::erreur('Un devis refuse ne peut pas etre facture.', 409);
+        $valide = ($devis['statut'] ?? '') === 'accepte'
+            || (new ValidationService())->estValidee('devis', $id);
+        if (!$valide) {
+            Response::erreur('Seul un devis valide par le directeur peut etre facture.', 409);
         }
 
         $entete = [

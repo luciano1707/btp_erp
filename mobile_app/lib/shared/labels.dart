@@ -15,6 +15,7 @@ String labelStatut(dynamic code) {
     'suspendu' => 'Suspendu',
     'termine' => 'Terminé',
     'annule' => 'Annulé',
+    'annulee' => 'Annulée',
     // Lots
     'a_faire' => 'À faire',
     // Devis
@@ -22,6 +23,14 @@ String labelStatut(dynamic code) {
     'accepte' => 'Accepté',
     'refuse' => 'Refusé',
     'converti' => 'Converti en facture',
+    // Workflow de validation
+    'en_attente' => 'En attente',
+    'valide' => 'Validée',
+    'traite' => 'Traitée',
+    'rejete' => 'Rejetée',
+    'clos' => 'Clos',
+    'cloture' => 'Clôturé',
+    'ouvert' => 'Ouvert',
     // Achats
     'commande' => 'Commande',
     'recu' => 'Réceptionné',
@@ -31,7 +40,6 @@ String labelStatut(dynamic code) {
     'emise' => 'Émise',
     'payee_partiel' => 'Partiellement payée',
     'payee' => 'Payée',
-    'annulee' => 'Annulée',
     'en_retard' => 'En retard',
     // Paiements
     'especes' => 'Espèces',
@@ -47,11 +55,23 @@ String labelStatut(dynamic code) {
 int couleurStatut(dynamic code) {
   final valeur = code?.toString() ?? '';
   return switch (valeur) {
-    'termine' || 'accepte' || 'recu' || 'payee' || 'converti' => 0xFF1B7A46,
-    'en_cours' || 'emise' || 'partiellement_recu' || 'payee_partiel' =>
-      0xFFB4741A,
-    'annule' || 'annulee' || 'refuse' || 'en_retard' => 0xFF9C422B,
-    _ => 0xFF68756E,
+    'termine' ||
+    'accepte' ||
+    'recu' ||
+    'payee' ||
+    'converti' ||
+    'valide' ||
+    'traite' ||
+    'clos' ||
+    'cloture' => 0xFF1B7A46,
+    'en_cours' ||
+    'emise' ||
+    'partiellement_recu' ||
+    'payee_partiel' ||
+    'en_attente' ||
+    'ouvert' => 0xFFB4741A,
+    'annule' || 'annulee' || 'refuse' || 'rejete' || 'en_retard' => 0xFF9C422B,
+    _ => 0xFF68798B,
   };
 }
 

@@ -12,6 +12,8 @@ enum FieldType {
   checkbox,
 }
 
+enum ModuleLineMode { document, materiel, budget }
+
 class ModuleField {
   const ModuleField(
     this.name,
@@ -48,6 +50,8 @@ class AppModule {
     this.fields = const [],
     this.hasLines = false,
     this.workflow,
+    this.workflowRoles = const [],
+    this.lineMode = ModuleLineMode.document,
     this.deletable = false,
     this.updatable = true,
     this.searchable = true,
@@ -69,6 +73,8 @@ class AppModule {
   final List<ModuleField> fields;
   final bool hasLines;
   final String? workflow;
+  final List<String> workflowRoles;
+  final ModuleLineMode lineMode;
   final bool deletable;
 
   /// L'API expose-t-il une route PUT sur `{endpoint}/{id}` ?
@@ -85,13 +91,17 @@ class AppModule {
   final String? printPath;
 
   bool canRead(String role) => role == 'directeur' || readRoles.contains(role);
-  bool canWrite(String role) => role == 'directeur' || writeRoles.contains(role);
+  bool canWrite(String role) =>
+      role == 'directeur' || writeRoles.contains(role);
   bool canCreate(String role) =>
       role == 'directeur' || (createRoles ?? writeRoles).contains(role);
-  bool canDelete(String role) => role == 'directeur' || deleteRoles.contains(role);
+  bool canDelete(String role) =>
+      role == 'directeur' || deleteRoles.contains(role);
+  bool canWorkflow(String role) =>
+      role == 'directeur' || workflowRoles.contains(role);
 
   List<ModuleField> fieldsFor(String role, {bool editing = false}) {
-    if (role == 'directeur') return fields;
+    if (role == 'directeur' && !editing) return fields;
     final allowed = (editing ? editFieldsByRole : createFieldsByRole)[role];
     if (allowed == null) return fields;
     return fields.where((field) => allowed.contains(field.name)).toList();
@@ -99,8 +109,7 @@ class AppModule {
 
   bool canEdit(String role) =>
       role == 'directeur' ||
-      writeRoles.contains(role) &&
-          (editFieldsByRole[role]?.isNotEmpty ?? true);
+      writeRoles.contains(role) && (editFieldsByRole[role]?.isNotEmpty ?? true);
 }
 
 const referentialModules = <AppModule>[
@@ -127,7 +136,11 @@ const referentialModules = <AppModule>[
           'sous_traitant': 'Sous-traitant',
         },
       ),
-      ModuleField('taux_journalier', 'Taux journalier (Ar)', type: FieldType.number),
+      ModuleField(
+        'taux_journalier',
+        'Taux journalier (Ar)',
+        type: FieldType.number,
+      ),
       ModuleField('actif', 'Actif', type: FieldType.checkbox),
     ],
     deletable: true,
@@ -166,11 +179,27 @@ const referentialModules = <AppModule>[
     writeRoles: ['comptable', 'magasinier'],
     createRoles: ['magasinier'],
     createFieldsByRole: {
-      'magasinier': ['nom', 'categorie', 'contact', 'telephone', 'email', 'adresse', 'actif'],
+      'magasinier': [
+        'nom',
+        'categorie',
+        'contact',
+        'telephone',
+        'email',
+        'adresse',
+        'actif',
+      ],
     },
     editFieldsByRole: {
       'comptable': ['contact', 'telephone', 'email', 'adresse', 'nif', 'stat'],
-      'magasinier': ['nom', 'categorie', 'contact', 'telephone', 'email', 'adresse', 'actif'],
+      'magasinier': [
+        'nom',
+        'categorie',
+        'contact',
+        'telephone',
+        'email',
+        'adresse',
+        'actif',
+      ],
     },
     fields: [
       ModuleField('nom', 'Nom', required: true),
@@ -230,16 +259,34 @@ const referentialModules = <AppModule>[
     createRoles: ['magasinier'],
     deleteRoles: ['magasinier'],
     createFieldsByRole: {
-      'magasinier': ['code', 'designation', 'unite', 'prix_unitaire', 'seuil_alerte', 'actif'],
+      'magasinier': [
+        'code',
+        'designation',
+        'unite',
+        'prix_unitaire',
+        'seuil_alerte',
+        'actif',
+      ],
     },
     editFieldsByRole: {
-      'magasinier': ['code', 'designation', 'unite', 'prix_unitaire', 'seuil_alerte', 'actif'],
+      'magasinier': [
+        'code',
+        'designation',
+        'unite',
+        'prix_unitaire',
+        'seuil_alerte',
+        'actif',
+      ],
     },
     fields: [
       ModuleField('code', 'Code'),
       ModuleField('designation', 'Désignation', required: true),
       ModuleField('unite', 'Unité'),
-      ModuleField('prix_unitaire', 'Prix unitaire (Ar)', type: FieldType.number),
+      ModuleField(
+        'prix_unitaire',
+        'Prix unitaire (Ar)',
+        type: FieldType.number,
+      ),
       ModuleField('seuil_alerte', 'Seuil d’alerte', type: FieldType.number),
       ModuleField('actif', 'Actif', type: FieldType.checkbox),
     ],
@@ -338,7 +385,12 @@ const appModules = <AppModule>[
         type: FieldType.remoteSelect,
         remoteSource: 'chantiers',
       ),
-      ModuleField('date_achat', 'Date d’achat', type: FieldType.date, required: true),
+      ModuleField(
+        'date_achat',
+        'Date d’achat',
+        type: FieldType.date,
+        required: true,
+      ),
       ModuleField('notes', 'Notes', type: FieldType.textarea),
     ],
     hasLines: true,
@@ -372,7 +424,12 @@ const appModules = <AppModule>[
           'ajustement': 'Ajustement',
         },
       ),
-      ModuleField('quantite', 'Quantité', type: FieldType.number, required: true),
+      ModuleField(
+        'quantite',
+        'Quantité',
+        type: FieldType.number,
+        required: true,
+      ),
       ModuleField(
         'chantier_id',
         'Chantier (facultatif)',
@@ -410,12 +467,18 @@ const appModules = <AppModule>[
         type: FieldType.remoteSelect,
         remoteSource: 'chantiers',
       ),
-      ModuleField('date_devis', 'Date du devis', type: FieldType.date, required: true),
+      ModuleField(
+        'date_devis',
+        'Date du devis',
+        type: FieldType.date,
+        required: true,
+      ),
       ModuleField('validite', 'Validité (jours)', type: FieldType.number),
       ModuleField('notes', 'Notes', type: FieldType.textarea),
     ],
     hasLines: true,
     workflow: 'devis',
+    workflowRoles: ['comptable'],
     deletable: true,
     printPath: '/imprimer',
   ),
@@ -442,12 +505,18 @@ const appModules = <AppModule>[
         type: FieldType.remoteSelect,
         remoteSource: 'chantiers',
       ),
-      ModuleField('date_facture', 'Date de facture', type: FieldType.date, required: true),
+      ModuleField(
+        'date_facture',
+        'Date de facture',
+        type: FieldType.date,
+        required: true,
+      ),
       ModuleField('echeance', 'Échéance', type: FieldType.date),
       ModuleField('notes', 'Notes', type: FieldType.textarea),
     ],
     hasLines: true,
     workflow: 'facture',
+    workflowRoles: ['comptable'],
     deletable: true,
     printPath: '/imprimer',
   ),
@@ -461,5 +530,444 @@ const appModules = <AppModule>[
     deletable: false,
     updatable: false,
     filterFields: {'action': 'Action', 'entite': 'Entité'},
+  ),
+  AppModule(
+    id: 'demandes-materiel',
+    title: 'Demandes de matériel',
+    endpoint: 'demandes-materiel',
+    icon: Icons.playlist_add_check_outlined,
+    permission: 'demandes_materiel',
+    readRoles: ['chef_chantier', 'comptable', 'magasinier'],
+    createRoles: ['chef_chantier'],
+    workflowRoles: ['magasinier'],
+    fields: [
+      ModuleField(
+        'chantier_id',
+        'Chantier',
+        type: FieldType.remoteSelect,
+        remoteSource: 'chantiers',
+      ),
+      ModuleField('objet', 'Objet', required: true),
+      ModuleField(
+        'urgence',
+        'Urgence',
+        type: FieldType.select,
+        options: {
+          'basse': 'Basse',
+          'normale': 'Normale',
+          'haute': 'Haute',
+          'urgente': 'Urgente',
+        },
+      ),
+      ModuleField('date_demande', 'Date', type: FieldType.date, required: true),
+      ModuleField('notes', 'Notes', type: FieldType.textarea),
+    ],
+    hasLines: true,
+    lineMode: ModuleLineMode.materiel,
+    workflow: 'demande_materiel',
+    updatable: false,
+  ),
+  AppModule(
+    id: 'rapports-journaliers',
+    title: 'Rapports journaliers',
+    endpoint: 'rapports-journaliers',
+    icon: Icons.assignment_outlined,
+    permission: 'rapports_journaliers',
+    readRoles: ['chef_chantier', 'comptable', 'magasinier'],
+    writeRoles: ['chef_chantier'],
+    workflowRoles: ['chef_chantier'],
+    editFieldsByRole: {
+      'chef_chantier': [
+        'meteo',
+        'travaux_realises',
+        'avancement_pct',
+        'problemes',
+        'incidents',
+        'observations',
+      ],
+      'directeur': [
+        'date_rapport',
+        'meteo',
+        'travaux_realises',
+        'avancement_pct',
+        'problemes',
+        'incidents',
+        'observations',
+      ],
+    },
+    fields: [
+      ModuleField(
+        'chantier_id',
+        'Chantier',
+        type: FieldType.remoteSelect,
+        remoteSource: 'chantiers',
+        required: true,
+      ),
+      ModuleField('date_rapport', 'Date', type: FieldType.date, required: true),
+      ModuleField('meteo', 'Météo'),
+      ModuleField(
+        'travaux_realises',
+        'Travaux réalisés',
+        type: FieldType.textarea,
+      ),
+      ModuleField('avancement_pct', 'Avancement (%)', type: FieldType.number),
+      ModuleField('problemes', 'Problèmes', type: FieldType.textarea),
+      ModuleField('incidents', 'Incidents', type: FieldType.textarea),
+      ModuleField('observations', 'Observations', type: FieldType.textarea),
+    ],
+    workflow: 'rapport',
+  ),
+  AppModule(
+    id: 'depenses',
+    title: 'Dépenses',
+    endpoint: 'depenses',
+    icon: Icons.payments_outlined,
+    permission: 'depenses',
+    readRoles: ['chef_chantier', 'comptable', 'magasinier'],
+    createRoles: ['chef_chantier', 'comptable'],
+    workflowRoles: ['chef_chantier', 'comptable'],
+    fields: [
+      ModuleField(
+        'chantier_id',
+        'Chantier',
+        type: FieldType.remoteSelect,
+        remoteSource: 'chantiers',
+      ),
+      ModuleField('categorie', 'Catégorie', required: true),
+      ModuleField('libelle', 'Libellé', required: true),
+      ModuleField(
+        'montant',
+        'Montant (Ar)',
+        type: FieldType.number,
+        required: true,
+      ),
+      ModuleField('date_depense', 'Date', type: FieldType.date, required: true),
+      ModuleField('mode_paiement', 'Mode de paiement'),
+      ModuleField('beneficiaire', 'Bénéficiaire'),
+      ModuleField('notes', 'Notes', type: FieldType.textarea),
+    ],
+    workflow: 'depense',
+    updatable: false,
+  ),
+  AppModule(
+    id: 'budgets',
+    title: 'Budgets',
+    endpoint: 'budgets',
+    icon: Icons.account_balance_wallet_outlined,
+    permission: 'budgets',
+    readRoles: ['chef_chantier', 'comptable'],
+    writeRoles: ['comptable'],
+    editFieldsByRole: {
+      'directeur': [
+        'budget_previsionnel',
+        'budget_revision',
+        'statut',
+        'notes',
+      ],
+      'comptable': [
+        'budget_previsionnel',
+        'budget_revision',
+        'statut',
+        'notes',
+      ],
+    },
+    fields: [
+      ModuleField(
+        'chantier_id',
+        'Chantier',
+        type: FieldType.remoteSelect,
+        remoteSource: 'chantiers',
+        required: true,
+      ),
+      ModuleField('annee', 'Année', type: FieldType.number, required: true),
+      ModuleField(
+        'budget_previsionnel',
+        'Budget prévisionnel (Ar)',
+        type: FieldType.number,
+      ),
+      ModuleField('budget_revision', 'Révision (Ar)', type: FieldType.number),
+      ModuleField(
+        'statut',
+        'Statut',
+        type: FieldType.select,
+        options: {'ouvert': 'Ouvert', 'cloture': 'Clôturé'},
+      ),
+      ModuleField('notes', 'Notes', type: FieldType.textarea),
+    ],
+    hasLines: true,
+    lineMode: ModuleLineMode.budget,
+  ),
+  AppModule(
+    id: 'rfi',
+    title: 'Demandes d’information (RFI)',
+    endpoint: 'rfi',
+    icon: Icons.question_answer_outlined,
+    permission: 'rfi',
+    readRoles: ['chef_chantier', 'comptable'],
+    createRoles: ['chef_chantier'],
+    workflowRoles: ['chef_chantier'],
+    fields: [
+      ModuleField(
+        'chantier_id',
+        'Chantier',
+        type: FieldType.remoteSelect,
+        remoteSource: 'chantiers',
+        required: true,
+      ),
+      ModuleField('objet', 'Objet', required: true),
+      ModuleField(
+        'question',
+        'Question',
+        type: FieldType.textarea,
+        required: true,
+      ),
+      ModuleField(
+        'priorite',
+        'Priorité',
+        type: FieldType.select,
+        options: {
+          'basse': 'Basse',
+          'normale': 'Normale',
+          'haute': 'Haute',
+          'critique': 'Critique',
+        },
+      ),
+      ModuleField('date_limite', 'Date limite', type: FieldType.date),
+    ],
+    workflow: 'rfi',
+    updatable: false,
+  ),
+  AppModule(
+    id: 'qualite',
+    title: 'Qualité',
+    endpoint: 'qualite',
+    icon: Icons.verified_outlined,
+    permission: 'qualite',
+    readRoles: ['chef_chantier', 'comptable'],
+    writeRoles: ['chef_chantier'],
+    editFieldsByRole: {
+      'chef_chantier': [
+        'lot_id',
+        'type_inspection',
+        'resultat',
+        'constat',
+        'action_corrective',
+        'statut',
+      ],
+      'directeur': [
+        'lot_id',
+        'type_inspection',
+        'resultat',
+        'constat',
+        'action_corrective',
+        'statut',
+      ],
+    },
+    fields: [
+      ModuleField(
+        'chantier_id',
+        'Chantier',
+        type: FieldType.remoteSelect,
+        remoteSource: 'chantiers',
+        required: true,
+      ),
+      ModuleField(
+        'date_inspection',
+        'Date d’inspection',
+        type: FieldType.date,
+        required: true,
+      ),
+      ModuleField('type_inspection', 'Type d’inspection'),
+      ModuleField(
+        'resultat',
+        'Résultat',
+        type: FieldType.select,
+        options: {
+          'conforme': 'Conforme',
+          'non_conforme': 'Non conforme',
+          'reserve': 'Avec réserve',
+        },
+      ),
+      ModuleField('constat', 'Constat', type: FieldType.textarea),
+      ModuleField(
+        'action_corrective',
+        'Action corrective',
+        type: FieldType.textarea,
+      ),
+      ModuleField(
+        'statut',
+        'Statut',
+        type: FieldType.select,
+        options: {'ouvert': 'Ouvert', 'en_cours': 'En cours', 'clos': 'Clos'},
+      ),
+    ],
+  ),
+  AppModule(
+    id: 'securite',
+    title: 'Sécurité',
+    endpoint: 'securite',
+    icon: Icons.health_and_safety_outlined,
+    permission: 'securite',
+    readRoles: ['chef_chantier', 'comptable'],
+    writeRoles: ['chef_chantier'],
+    editFieldsByRole: {
+      'chef_chantier': [
+        'lieu',
+        'type_observation',
+        'description',
+        'action_immediate',
+        'mesure_preventive',
+        'statut',
+      ],
+      'directeur': [
+        'lieu',
+        'type_observation',
+        'description',
+        'action_immediate',
+        'mesure_preventive',
+        'statut',
+      ],
+    },
+    fields: [
+      ModuleField(
+        'chantier_id',
+        'Chantier',
+        type: FieldType.remoteSelect,
+        remoteSource: 'chantiers',
+        required: true,
+      ),
+      ModuleField(
+        'date_observation',
+        'Date',
+        type: FieldType.date,
+        required: true,
+      ),
+      ModuleField('lieu', 'Lieu'),
+      ModuleField(
+        'type_observation',
+        'Type',
+        type: FieldType.select,
+        options: {
+          'danger': 'Danger',
+          'risque': 'Risque',
+          'bonne_pratique': 'Bonne pratique',
+          'autre': 'Autre',
+        },
+      ),
+      ModuleField(
+        'description',
+        'Description',
+        type: FieldType.textarea,
+        required: true,
+      ),
+      ModuleField(
+        'action_immediate',
+        'Action immédiate',
+        type: FieldType.textarea,
+      ),
+      ModuleField(
+        'mesure_preventive',
+        'Mesure préventive',
+        type: FieldType.textarea,
+      ),
+      ModuleField(
+        'statut',
+        'Statut',
+        type: FieldType.select,
+        options: {'ouvert': 'Ouvert', 'en_cours': 'En cours', 'clos': 'Clos'},
+      ),
+    ],
+  ),
+  AppModule(
+    id: 'incidents',
+    title: 'Incidents',
+    endpoint: 'incidents',
+    icon: Icons.warning_amber_outlined,
+    permission: 'incidents',
+    readRoles: ['chef_chantier', 'comptable'],
+    writeRoles: ['chef_chantier'],
+    editFieldsByRole: {
+      'chef_chantier': [
+        'lieu',
+        'type_incident',
+        'gravite',
+        'victimes',
+        'description',
+        'premiers_secours',
+        'action_corrective',
+        'statut',
+      ],
+      'directeur': [
+        'lieu',
+        'type_incident',
+        'gravite',
+        'victimes',
+        'description',
+        'premiers_secours',
+        'action_corrective',
+        'statut',
+        'suivi_par',
+      ],
+    },
+    fields: [
+      ModuleField(
+        'chantier_id',
+        'Chantier',
+        type: FieldType.remoteSelect,
+        remoteSource: 'chantiers',
+        required: true,
+      ),
+      ModuleField(
+        'date_incident',
+        'Date et heure',
+        type: FieldType.text,
+        required: true,
+      ),
+      ModuleField('lieu', 'Lieu'),
+      ModuleField(
+        'type_incident',
+        'Type',
+        type: FieldType.select,
+        options: {
+          'incident': 'Incident',
+          'accident': 'Accident',
+          'presque_accident': 'Presque-accident',
+        },
+      ),
+      ModuleField(
+        'gravite',
+        'Gravité',
+        type: FieldType.select,
+        options: {
+          'faible': 'Faible',
+          'moyenne': 'Moyenne',
+          'grave': 'Grave',
+          'critique': 'Critique',
+        },
+      ),
+      ModuleField('victimes', 'Victimes'),
+      ModuleField(
+        'description',
+        'Description',
+        type: FieldType.textarea,
+        required: true,
+      ),
+      ModuleField(
+        'premiers_secours',
+        'Premiers secours',
+        type: FieldType.textarea,
+      ),
+      ModuleField(
+        'action_corrective',
+        'Action corrective',
+        type: FieldType.textarea,
+      ),
+      ModuleField(
+        'statut',
+        'Statut',
+        type: FieldType.select,
+        options: {'ouvert': 'Ouvert', 'en_cours': 'En cours', 'clos': 'Clos'},
+      ),
+    ],
   ),
 ];

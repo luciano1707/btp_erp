@@ -17,19 +17,35 @@ $navigation = [
         ['/chantiers', 'Chantiers', 'batiment', 'chantiers'],
         ['/finances', 'Finances', 'graphique', 'finances'],
     ],
-    'Exploitation' => [
+    'Opérations' => [
+        ['/rapports-journaliers', 'Rapports journaliers', 'document', 'rapports_journaliers'],
+        ['/demandes-materiel', 'Demandes de matériel', 'panier', 'demandes_materiel'],
+    ],
+    'Approvisionnement' => [
         ['/achats', 'Achats', 'panier', 'achats'],
         ['/stock', 'Stock', 'boite', 'stock'],
+        ['/referentiels/fournisseurs', 'Fournisseurs', 'base', 'fournisseurs'],
     ],
     'Commercial' => [
         ['/devis', 'Devis', 'document', 'devis'],
         ['/factures', 'Factures', 'recu', 'factures'],
     ],
-    'Donnees' => [
-        ['/referentiels', 'Referentiels', 'base', 'referentiels'],
-        ['/journal', 'Journal', 'liste', 'journal'],
+    'Suivi financier' => [
+        ['/depenses', 'Dépenses', 'recu', 'depenses'],
+        ['/budgets', 'Budgets', 'graphique', 'budgets'],
+    ],
+    'Qualité / Sécurité' => [
+        ['/rfi', 'RFI', 'document', 'rfi'],
+        ['/qualite', 'Qualité', 'liste', 'qualite'],
+        ['/securite', 'Sécurité', 'liste', 'securite'],
+        ['/incidents', 'Incidents', 'liste', 'incidents'],
+    ],
+    'Données' => [
+        ['/referentiels', 'Référentiels', 'base', 'referentiels'],
+        ['/notifications', 'Notifications', 'liste', 'notifications'],
+        ['/journal', 'Journal d\'audit', 'liste', 'journal'],
         ['/profil', 'Mon profil', 'engrenage', 'profil'],
-        ['/parametres', 'Parametres', 'engrenage', 'parametres'],
+        ['/parametres', 'Paramètres', 'engrenage', 'parametres'],
     ],
 ];
 
@@ -79,10 +95,13 @@ function icone(string $nom): string
     <main class="contenu-bare"><?= $contenu ?? '' ?></main>
 <?php else: ?>
 <body class="app-shell">
-    <aside class="sidebar">
+    <aside class="sidebar" id="sidebar">
         <div class="sidebar-marque">
             <span class="sidebar-logo"><?= e($sigle) ?></span>
             <span class="sidebar-nom"><?= e($nomApp) ?></span>
+            <button class="sidebar-fermer" id="btn-menu-fermer" type="button" aria-label="Fermer le menu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
         </div>
         <nav class="sidebar-nav">
             <?php foreach ($navigation as $section => $items): ?>
@@ -103,6 +122,9 @@ function icone(string $nom): string
     <div class="main">
         <header class="topbar">
             <div class="topbar-gauche">
+                <button class="bouton-menu" id="btn-menu" type="button" aria-label="Ouvrir le menu" aria-controls="sidebar" aria-expanded="false">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                </button>
                 <div class="topbar-icone" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" width="26" height="26">
                         <rect x="3" y="5" width="18" height="14" rx="2"/>
@@ -132,6 +154,7 @@ function icone(string $nom): string
     </div>
 <?php endif; ?>
 
+    <script src="<?= e(asset('js/export.js')) ?>"></script>
     <?php
     $lesScripts = !empty($scripts) ? $scripts : [];
     foreach ($lesScripts as $s):
@@ -140,6 +163,7 @@ function icone(string $nom): string
     <?php endforeach; ?>
     <?php if (!$bare): ?>
         <script src="<?= e(asset('js/app-shell.js')) ?>"></script>
+        <script src="<?= e(asset('js/select-recherche.js')) ?>"></script>
     <?php endif; ?>
 </body>
 </html>

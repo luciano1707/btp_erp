@@ -15,6 +15,16 @@ use App\Controllers\Web\JournalPageController;
 use App\Controllers\Web\ParametrePageController;
 use App\Controllers\Web\ProfilPageController;
 use App\Controllers\Web\ReferentielController;
+use App\Controllers\Web\DemandeMaterielPageController;
+use App\Controllers\Web\RapportJournalierPageController;
+use App\Controllers\Web\DepensePageController;
+use App\Controllers\Web\BudgetPageController;
+use App\Controllers\Web\RfiPageController;
+use App\Controllers\Web\QualitePageController;
+use App\Controllers\Web\SecuritePageController;
+use App\Controllers\Web\IncidentPageController;
+use App\Controllers\Web\NotificationPageController;
+use App\Controllers\Api\ExportController;
 use App\Middleware\AuthMiddleware;
 use App\Middleware\PermissionMiddleware;
 use App\Core\Router;
@@ -60,6 +70,8 @@ return static function (Router $r): void {
     $page('/devis/{id}',        [FacturationPageController::class, 'detailDevis'], 'devis');
     $page('/factures',         [FacturationPageController::class, 'listeFactures'], 'factures');
     $page('/factures/nouveau', [FacturationPageController::class, 'formulaireFacture'], 'factures', 'create');
+    $page('/factures/{id}/imprimer', [FacturationPageController::class, 'imprimerFacture'], 'factures');
+    $page('/factures/{id}/recu',     [FacturationPageController::class, 'recuFacture'], 'factures');
     $page('/factures/{id}',    [FacturationPageController::class, 'detailFacture'], 'factures');
 
     // --- Suivi financier (Phase 7) ---
@@ -68,9 +80,55 @@ return static function (Router $r): void {
     // --- Journal d'audit (Phase 8) ---
     $page('/journal', [JournalPageController::class, 'index'], 'journal');
 
+    // --- Demandes de materiel (aligné CDC) ---
+    $page('/demandes-materiel',               [DemandeMaterielPageController::class, 'liste'],     'demandes_materiel');
+    $page('/demandes-materiel/nouveau',       [DemandeMaterielPageController::class, 'formulaire'], 'demandes_materiel', 'create');
+    $page('/demandes-materiel/{id}/modifier', [DemandeMaterielPageController::class, 'formulaire'], 'demandes_materiel', 'edit');
+    $page('/demandes-materiel/{id}',          [DemandeMaterielPageController::class, 'detail'],     'demandes_materiel');
+
+    // --- Rapports journaliers ---
+    $page('/rapports-journaliers',           [RapportJournalierPageController::class, 'liste'],     'rapports_journaliers');
+    $page('/rapports-journaliers/nouveau',  [RapportJournalierPageController::class, 'formulaire'], 'rapports_journaliers', 'create');
+    $page('/rapports-journaliers/{id}/modifier', [RapportJournalierPageController::class, 'formulaire'], 'rapports_journaliers', 'edit');
+    $page('/rapports-journaliers/{id}',     [RapportJournalierPageController::class, 'detail'],     'rapports_journaliers');
+
+    // --- Depenses ---
+    $page('/depenses',                   [DepensePageController::class, 'liste'],   'depenses');
+    $page('/depenses/nouveau',           [DepensePageController::class, 'formulaire'], 'depenses', 'create');
+    $page('/depenses/{id}',              [DepensePageController::class, 'detail'],     'depenses');
+
+    // --- Budgets ---
+    $page('/budgets',                    [BudgetPageController::class, 'liste'],   'budgets');
+    $page('/budgets/nouveau',            [BudgetPageController::class, 'formulaire'], 'budgets', 'edit');
+    $page('/budgets/{id}/modifier',     [BudgetPageController::class, 'formulaire'], 'budgets', 'edit');
+    $page('/budgets/{id}',               [BudgetPageController::class, 'detail'],     'budgets');
+
+    // --- RFI / Qualite / Securite / Incidents ---
+    $page('/rfi',                        [RfiPageController::class, 'liste'],   'rfi');
+    $page('/rfi/nouveau',                [RfiPageController::class, 'formulaire'], 'rfi', 'create');
+    $page('/rfi/{id}',                   [RfiPageController::class, 'detail'],     'rfi');
+
+    $page('/qualite',                    [QualitePageController::class, 'liste'],   'qualite');
+    $page('/qualite/nouveau',            [QualitePageController::class, 'formulaire'], 'qualite', 'create');
+    $page('/qualite/{id}',               [QualitePageController::class, 'detail'],     'qualite');
+
+    $page('/securite',                   [SecuritePageController::class, 'liste'],   'securite');
+    $page('/securite/nouveau',           [SecuritePageController::class, 'formulaire'], 'securite', 'create');
+    $page('/securite/{id}',              [SecuritePageController::class, 'detail'],     'securite');
+
+    $page('/incidents',                  [IncidentPageController::class, 'liste'],   'incidents');
+    $page('/incidents/nouveau',          [IncidentPageController::class, 'formulaire'], 'incidents', 'create');
+    $page('/incidents/{id}',             [IncidentPageController::class, 'detail'],     'incidents');
+
+    // --- Notifications ---
+    $page('/notifications',              [NotificationPageController::class, 'index'], 'notifications');
+
     // --- Parametres ---
     $page('/profil',      [ProfilPageController::class, 'index'], 'profil');
     $page('/parametres', [ParametrePageController::class, 'index'], 'parametres');
-    $page('/factures/{id}/imprimer', [FacturationPageController::class, 'imprimerFacture'], 'factures');
-    $page('/factures/{id}/recu',     [FacturationPageController::class, 'recuFacture'], 'factures');
+
+    // --- Exports PDF navigues directement par le navigateur ---
+    $r->post('/export/pdf/{module}', [ExportController::class, 'exportPDFNavigateur'], [AuthMiddleware::class]);
+    $r->post('/export/rapport-financier/pdf', [ExportController::class, 'exportRapportFinancierPDFNavigateur'], [AuthMiddleware::class]);
+    $r->post('/export/devis/{id}/pdf', [ExportController::class, 'exportDevisPDFNavigateur'], [AuthMiddleware::class]);
 };

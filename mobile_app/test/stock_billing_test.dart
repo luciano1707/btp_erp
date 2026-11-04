@@ -191,6 +191,326 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Les listes mobiles affichent le nom métier de chaque élément', (
+    tester,
+  ) async {
+    final cases = [
+      (
+        module: referentialModules.firstWhere((item) => item.id == 'employes'),
+        record: {'id': 8, 'prenom': 'Miora', 'nom': 'Rakoto'},
+        expectedTitle: 'Miora Rakoto',
+      ),
+      (
+        module: appModules.firstWhere((item) => item.id == 'demandes-materiel'),
+        record: {
+          'id': 9,
+          'numero': 'DM-009',
+          'objet': 'Ciment pour fondations',
+          'chantier_nom': 'Résidence Ivandry',
+          'statut': 'en_attente',
+        },
+        expectedTitle: 'Ciment pour fondations',
+      ),
+      (
+        module: appModules.firstWhere(
+          (item) => item.id == 'rapports-journaliers',
+        ),
+        record: {
+          'id': 10,
+          'chantier_nom': 'Résidence Ivandry',
+          'date_rapport': '2026-11-04',
+        },
+        expectedTitle: 'Résidence Ivandry · 04/11/2026',
+      ),
+      (
+        module: appModules.firstWhere((item) => item.id == 'depenses'),
+        record: {
+          'id': 11,
+          'numero': 'DEP-011',
+          'libelle': 'Achat de sable',
+          'chantier_nom': 'Résidence Ivandry',
+        },
+        expectedTitle: 'Achat de sable',
+      ),
+      (
+        module: appModules.firstWhere((item) => item.id == 'budgets'),
+        record: {'id': 12, 'chantier_nom': 'Résidence Ivandry', 'annee': 2026},
+        expectedTitle: 'Résidence Ivandry · 2026',
+      ),
+    ];
+
+    for (final item in cases) {
+      final api = _api((request) async => _ok([item.record]));
+      await tester.pumpWidget(
+        MaterialApp(
+          home: ApiModuleScreen(
+            api: api,
+            module: item.module,
+            role: 'directeur',
+            key: ValueKey(item.module.id),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(item.expectedTitle), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('La liste des demandes affiche le tableau et garde le détail', (
+    tester,
+  ) async {
+    final api = _api((request) async {
+      if (request.url.path.endsWith('/demandes-materiel/3')) {
+        return _ok({
+          'id': 3,
+          'numero': 'DM-003',
+          'objet': 'Fer à béton 12 mm',
+          'chantier_nom': 'Immeuble Galaxy Andraharo',
+          'demandeur_nom': 'Rakotoarisoa',
+          'demandeur_prenom': 'Hery',
+          'urgence': 'urgente',
+          'statut': 'valide',
+          'date_demande': '2026-10-25',
+          'notes': 'Livrer au dépôt nord.',
+          'lignes': [
+            {
+              'designation': 'Fer à béton 12 mm',
+              'unite': 'barre',
+              'quantite_demandee': 25,
+            },
+          ],
+        });
+      }
+      return _ok([
+        {
+          'id': 3,
+          'numero': 'DM-003',
+          'objet': 'Fer à béton 12 mm',
+          'chantier_nom': 'Immeuble Galaxy Andraharo',
+          'demandeur_nom': 'Rakotoarisoa',
+          'demandeur_prenom': 'Hery',
+          'urgence': 'urgente',
+          'statut': 'valide',
+          'date_demande': '2026-10-25',
+        },
+        {
+          'id': 4,
+          'numero': 'DM-004',
+          'objet': 'Sable et gravillon',
+          'chantier_nom': 'Réhabilitation RN2 PK12-PK20',
+          'demandeur_nom': 'Rakotoarisoa',
+          'demandeur_prenom': 'Hery',
+          'urgence': 'normale',
+          'statut': 'en_attente',
+          'date_demande': '2026-10-22',
+        },
+        {
+          'id': 5,
+          'numero': 'DM-005',
+          'objet': 'Parpaings 20',
+          'chantier_nom': 'Résidence Ivandry',
+          'demandeur_nom': 'Rakotoarisoa',
+          'demandeur_prenom': 'Hery',
+          'urgence': 'normale',
+          'statut': 'traite',
+          'date_demande': '2026-10-28',
+        },
+      ]);
+    });
+    final module = appModules.firstWhere(
+      (item) => item.id == 'demandes-materiel',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ApiModuleScreen(api: api, module: module, role: 'directeur'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DataTable), findsOneWidget);
+    for (final heading in [
+      'N°',
+      'Objet',
+      'Chantier',
+      'Demandeur',
+      'Urgence',
+      'Statut',
+      'Date',
+      'Actions',
+    ]) {
+      expect(find.text(heading), findsOneWidget);
+    }
+    expect(find.text('DM-003'), findsOneWidget);
+    expect(find.text('Fer à béton 12 mm'), findsOneWidget);
+    expect(find.text('Immeuble Galaxy Andraharo'), findsOneWidget);
+    expect(find.text('Hery Rakotoarisoa'), findsNWidgets(3));
+    expect(find.text('Urgente'), findsOneWidget);
+    expect(find.text('25/10/2026'), findsOneWidget);
+    expect(find.text('Sable et gravillon'), findsOneWidget);
+    expect(find.text('Parpaings 20'), findsOneWidget);
+    expect(find.text('Validée'), findsOneWidget);
+    expect(find.text('En attente'), findsOneWidget);
+    expect(find.text('Traitée'), findsOneWidget);
+    expect(find.text('en_attente'), findsNothing);
+
+    await tester.tap(find.text('Fer à béton 12 mm').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Détail'), findsNothing);
+    expect(find.text('Livrer au dépôt nord.'), findsOneWidget);
+    expect(find.text('Fer à béton 12 mm'), findsOneWidget);
+  });
+
+  testWidgets('Les actions d’approbation apparaissent en tête du détail', (
+    tester,
+  ) async {
+    final requests = <http.Request>[];
+    var status = 'en_attente';
+    final api = _api((request) async {
+      requests.add(request);
+      if (request.method == 'POST' &&
+          request.url.path.endsWith('/demandes-materiel/3/approuver')) {
+        status = 'valide';
+        return _ok({});
+      }
+      if (request.method == 'GET' &&
+          request.url.path.endsWith('/demandes-materiel/3')) {
+        return _ok({
+          'id': 3,
+          'numero': 'DM-003',
+          'objet': 'Fer à béton 12 mm',
+          'statut': status,
+          'date_demande': '2026-10-25',
+          'lignes': [
+            {
+              'designation': 'Fer à béton 12 mm',
+              'unite': 'barre',
+              'quantite_demandee': 25,
+            },
+          ],
+        });
+      }
+      return _ok([]);
+    });
+    final module = appModules.firstWhere(
+      (item) => item.id == 'demandes-materiel',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: RecordDetailScreen(
+          api: api,
+          module: module,
+          role: 'directeur',
+          item: const {'id': 3},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final approveButton = find.widgetWithText(FilledButton, 'Approuver');
+    final rejectButton = find.widgetWithText(OutlinedButton, 'Refuser');
+    expect(approveButton, findsOneWidget);
+    expect(rejectButton, findsOneWidget);
+    expect(
+      tester.getTopLeft(approveButton).dy,
+      lessThan(tester.getTopLeft(find.text('Lignes')).dy),
+    );
+
+    await tester.tap(approveButton);
+    await tester.pumpAndSettle();
+
+    expect(
+      requests.any(
+        (request) =>
+            request.method == 'POST' &&
+            request.url.path.endsWith('/demandes-materiel/3/approuver'),
+      ),
+      isTrue,
+    );
+    expect(find.text('Approuver'), findsNothing);
+  });
+
+  testWidgets('La recherche des demandes interroge l’API en temps réel', (
+    tester,
+  ) async {
+    final requestedUris = <Uri>[];
+    final api = _api((request) async {
+      requestedUris.add(request.url);
+      final records = [
+        {
+          'id': 3,
+          'numero': 'DM-003',
+          'objet': 'Fer à béton 12 mm',
+          'chantier_nom': 'Immeuble Galaxy Andraharo',
+          'demandeur_nom': 'Rakotoarisoa',
+          'demandeur_prenom': 'Hery',
+          'urgence': 'urgente',
+          'statut': 'valide',
+          'date_demande': '2026-10-25',
+        },
+        {
+          'id': 4,
+          'numero': 'DM-004',
+          'objet': 'Sable et gravillon',
+          'chantier_nom': 'Réhabilitation RN2 PK12-PK20',
+          'demandeur_nom': 'Rakotoarisoa',
+          'demandeur_prenom': 'Hery',
+          'urgence': 'normale',
+          'statut': 'en_attente',
+          'date_demande': '2026-10-22',
+        },
+      ];
+      final query = request.url.queryParameters['recherche']?.toLowerCase();
+      return _ok(
+        query == null || query.isEmpty
+            ? records
+            : records
+                  .where(
+                    (item) =>
+                        item['objet'].toString().toLowerCase().contains(query),
+                  )
+                  .toList(),
+      );
+    });
+    final module = appModules.firstWhere(
+      (item) => item.id == 'demandes-materiel',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ApiModuleScreen(api: api, module: module, role: 'directeur'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(requestedUris, hasLength(1));
+    expect(requestedUris.first.queryParameters, isEmpty);
+
+    await tester.enterText(find.byType(TextField), 'Fer');
+    await tester.pump(const Duration(milliseconds: 200));
+    expect(requestedUris, hasLength(1));
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Fer à béton 12 mm'), findsOneWidget);
+    expect(find.text('Sable et gravillon'), findsNothing);
+    expect(requestedUris, hasLength(2));
+    expect(requestedUris.last.queryParameters['recherche'], 'Fer');
+
+    await tester.enterText(find.byType(TextField), 'recherche inconnue');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+    expect(find.text('Aucun résultat pour cette recherche.'), findsOneWidget);
+    expect(requestedUris, hasLength(3));
+    expect(
+      requestedUris.last.queryParameters['recherche'],
+      'recherche inconnue',
+    );
+  });
+
   testWidgets('Le détail client affiche une fiche mobile structurée', (
     tester,
   ) async {

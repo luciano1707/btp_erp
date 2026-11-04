@@ -74,4 +74,39 @@ final class Pointage extends Model
         $req->execute([':c' => $chantierId]);
         return (int) $req->fetchColumn();
     }
+
+    /**
+     * Liste tous les pointages avec jointures (pour export)
+     * @param array $filtres Filtres optionnels
+     * @return array<int,array<string,mixed>>
+     */
+    public function liste(array $filtres = []): array
+    {
+        $sql = "SELECT p.*, e.nom AS employe_nom, e.prenom AS employe_prenom,
+                c.nom AS chantier_nom, c.code AS chantier_code
+                FROM pointages p
+                JOIN employes e ON e.id = p.employe_id
+                JOIN chantiers c ON c.id = p.chantier_id
+                WHERE 1=1";
+        $params = [];
+
+        if (!empty($filtres['chantier_id'])) {
+            $sql .= ' AND p.chantier_id = :c';
+            $params[':c'] = $filtres['chantier_id'];
+        }
+        if (!empty($filtres['date_debut'])) {
+            $sql .= ' AND p.date_pointage >= :dd';
+            $params[':dd'] = $filtres['date_debut'];
+        }
+        if (!empty($filtres['date_fin'])) {
+            $sql .= ' AND p.date_pointage <= :df';
+            $params[':df'] = $filtres['date_fin'];
+        }
+
+        $sql .= ' ORDER BY p.date_pointage DESC, c.nom ASC, e.nom ASC';
+
+        $req = $this->db()->prepare($sql);
+        $req->execute($params);
+        return $req->fetchAll();
+    }
 }

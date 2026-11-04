@@ -19,13 +19,15 @@ final class Access
         ],
         'pointages' => [
             'chef_chantier' => ['view', 'edit'],
-            'comptable' => ['view'], 'magasinier' => ['view'],
+            'comptable' => ['view'],
+            'magasinier' => ['view'],
         ],
         'finances' => [
+            'chef_chantier' => ['view'],
             'comptable' => ['view', 'create', 'edit', 'validate'],
         ],
         'achats' => [
-            'chef_chantier' => ['view'], 'comptable' => ['view', 'create', 'edit', 'validate'],
+            'chef_chantier' => ['view'],
             'magasinier' => ['view', 'create', 'edit', 'validate'],
         ],
         'stock' => [
@@ -33,9 +35,11 @@ final class Access
             'magasinier' => ['view', 'create', 'edit', 'validate'],
         ],
         'devis' => [
-            'chef_chantier' => ['view'], 'comptable' => ['view', 'create', 'edit', 'validate'],
+            'chef_chantier' => ['view'],
+            'comptable' => ['view', 'create', 'edit'],
         ],
         'factures' => [
+            'chef_chantier' => ['view'],
             'comptable' => ['view', 'create', 'edit', 'validate'],
         ],
         'referentiels' => [
@@ -61,17 +65,68 @@ final class Access
             'chef_chantier' => ['view'], 'comptable' => ['view'],
             'magasinier' => ['view', 'create', 'edit', 'delete'],
         ],
-        'journal' => [
+        // Modules alignés sur le CDC
+        'demandes_materiel' => [
+            'chef_chantier' => ['view', 'create'],
+            'magasinier'     => ['view', 'edit', 'validate'],
+            'comptable'      => ['view'],
+        ],
+        'rapports_journaliers' => [
+            'chef_chantier' => ['view', 'create', 'edit'],
+            'comptable'      => ['view'],
+            'magasinier'     => ['view'],
+        ],
+        'depenses' => [
+            'chef_chantier' => ['view', 'create'],
+            'comptable'      => ['view', 'create', 'edit', 'validate'],
+            'magasinier'     => ['view'],
+        ],
+        'budgets' => [
+            'chef_chantier' => ['view'], // Voit ses chantiers assignés uniquement
+            'comptable' => ['view', 'edit'], // Voit tous, saisit dépenses, clôture (avec validation directeur)
+        ],
+        'rfi' => [
+            'chef_chantier' => ['view', 'create', 'edit'],
+            'comptable' => ['view'],
+        ],
+        'qualite' => [
+            'chef_chantier' => ['view', 'create', 'edit'],
+            'comptable' => ['view'],
+        ],
+        'securite' => [
+            'chef_chantier' => ['view', 'create', 'edit'],
+            'comptable' => ['view'],
+        ],
+        'incidents' => [
+            'chef_chantier' => ['view', 'create', 'edit'],
+            'comptable' => ['view'],
+        ],
+        'notifications' => [
             'chef_chantier' => ['view'], 'comptable' => ['view'], 'magasinier' => ['view'],
         ],
+        'documents' => [
+            'chef_chantier' => ['view', 'create'],
+            'comptable'      => ['view'],
+            'magasinier'     => ['view'],
+        ],
+        'photos' => [
+            'chef_chantier' => ['view', 'create'],
+            'comptable'      => ['view'],
+            'magasinier'     => ['view'],
+        ],
+        'journal' => [],
         'profil' => [
             'directeur' => ['view', 'edit', 'password'], 'chef_chantier' => ['view', 'edit', 'password'],
             'comptable' => ['view', 'edit', 'password'], 'magasinier' => ['view', 'edit', 'password'],
         ],
-        'utilisateurs' => [
-            'chef_chantier' => ['view'], 'comptable' => ['view'], 'magasinier' => ['view'],
-        ],
+        'utilisateurs' => [],
         'parametres' => [],
+        'validation' => [
+            'directeur' => ['view', 'validate'],
+            'comptable' => ['view', 'validate'],
+            'chef_chantier' => ['view'],
+            'magasinier' => ['view'],
+        ],
     ];
 
     public static function autorise(?string $role, string $module, string $action = 'view'): bool
@@ -166,9 +221,9 @@ final class Access
                 'chef_chantier' => ['view' => ['id', 'code', 'designation', 'unite']],
                 'comptable' => ['view' => ['id', 'code', 'designation', 'unite', 'prix_unitaire']],
                 'magasinier' => [
-                    'view' => ['id', 'code', 'designation', 'unite', 'prix_unitaire', 'seuil_alerte', 'actif'],
-                    'create' => ['code', 'designation', 'unite', 'prix_unitaire', 'seuil_alerte', 'actif'],
-                    'edit' => ['code', 'designation', 'unite', 'prix_unitaire', 'seuil_alerte', 'actif'],
+                    'view' => ['id', 'code', 'designation', 'unite', 'seuil_alerte', 'actif'],
+                    'create' => ['code', 'designation', 'unite', 'seuil_alerte', 'actif'],
+                    'edit' => ['code', 'designation', 'unite', 'seuil_alerte', 'actif'],
                 ],
             ],
         ];

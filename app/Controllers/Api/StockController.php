@@ -6,8 +6,10 @@ use App\Core\Audit;
 use App\Core\Controller;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\ValidationService;
 use App\Models\Materiau;
 use App\Models\MouvementStock;
+use RuntimeException;
 
 /**
  * API du stock (Phase 5) : etat courant par materiau et enregistrement de mouvements
@@ -48,23 +50,45 @@ final class StockController extends Controller
         }
 
         $modele = new MouvementStock();
+        $materiauId = (int) $donnees['materiau_id'];
+        $stockActuel = $modele->stock($materiauId);
+        $exceptionnelle = $donnees['type'] === 'sortie'
+            && (float) $donnees['quantite'] > $stockActuel;
+
         $id = $modele->enregistrer([
-            'materiau_id'    => (int) $donnees['materiau_id'],
+            'materiau_id'    => $materiauId,
             'type'           => $donnees['type'],
             'quantite'       => (float) $donnees['quantite'],
             'chantier_id'    => !empty($requete->input('chantier_id')) ? (int) $requete->input('chantier_id') : null,
             'motif'          => $requete->input('motif') ?: null,
+            'statut'         => $exceptionnelle ? 'en_attente' : 'valide',
             'date_mouvement' => $requete->input('date_mouvement') ?: date('Y-m-d'),
             'cree_par'       => isset($requete->auth['sub']) ? (int) $requete->auth['sub'] : null,
         ]);
 
-        Audit::enregistrer('stock.mouvement', 'materiau', (int) $donnees['materiau_id'], [
+        if ($exceptionnelle) {
+            try {
+                (new ValidationService())->soumettre([
+                    'type_operation' => 'sortie_stock',
+                    'operation_id' => $id,
+                    'soumetteur_id' => isset($requete->auth['sub']) ? (int) $requete->auth['sub'] : 0,
+                ]);
+            } catch (RuntimeException $e) {
+                $modele->supprimer($id);
+                Response::erreur($e->getMessage(), 409);
+            }
+        }
+
+        Audit::enregistrer('stock.mouvement', 'materiau', $materiauId, [
             'type' => $donnees['type'], 'quantite' => $donnees['quantite'],
+            'exceptionnelle' => $exceptionnelle,
         ], isset($requete->auth['sub']) ? (int) $requete->auth['sub'] : null);
 
         Response::succes([
             'id'    => $id,
-            'stock' => $modele->stock((int) $donnees['materiau_id']),
-        ], 'Mouvement enregistre.', 201);
+            'stock' => $modele->stock($materiauId),
+        ], $exceptionnelle
+            ? 'Sortie exceptionnelle soumise a la validation du directeur.'
+            : 'Mouvement enregistre.', $exceptionnelle ? 202 : 201);
     }
 }

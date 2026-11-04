@@ -23,7 +23,7 @@ final class MouvementStock extends Model
                         WHEN type = 'entree' THEN quantite
                         WHEN type = 'sortie' THEN -quantite
                         ELSE quantite END), 0)
-             FROM mouvements_stock WHERE materiau_id = :m"
+             FROM mouvements_stock WHERE materiau_id = :m AND statut = 'valide'"
         );
         $req->execute([':m' => $materiauId]);
         return (float) $req->fetchColumn();
@@ -41,7 +41,7 @@ final class MouvementStock extends Model
                             WHEN mv.type = 'sortie' THEN -mv.quantite
                             ELSE mv.quantite END), 0) AS stock
                 FROM materiaux m
-                LEFT JOIN mouvements_stock mv ON mv.materiau_id = m.id
+                LEFT JOIN mouvements_stock mv ON mv.materiau_id = m.id AND mv.statut = 'valide'
                 WHERE m.actif = 1
                 GROUP BY m.id, m.code, m.designation, m.unite, m.seuil_alerte
                 ORDER BY m.designation ASC";

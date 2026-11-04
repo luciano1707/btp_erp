@@ -1,5 +1,6 @@
 param(
     [string]$OutputDirectory = "",
+    [string]$RuntimeDirectory = "",
     [switch]$RunMigrations
 )
 
@@ -21,27 +22,50 @@ if (Test-Path $OutputDirectory) {
     throw "Le dossier de sortie existe déjà : $OutputDirectory"
 }
 
-$temporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("digital-chantier-" + [guid]::NewGuid().ToString("N"))
+if (-not [string]::IsNullOrWhiteSpace($RuntimeDirectory)) {
+    if (-not [System.IO.Path]::IsPathRooted($RuntimeDirectory)) {
+        $RuntimeDirectory = Join-Path $projectRoot $RuntimeDirectory
+    }
+    $RuntimeDirectory = [System.IO.Path]::GetFullPath($RuntimeDirectory)
+    if (-not (Test-Path (Join-Path $RuntimeDirectory "phpdesktop-chrome.exe") -PathType Leaf)) {
+        throw "Runtime PHP Desktop introuvable : $RuntimeDirectory"
+    }
+}
+
+$temporaryDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("dc-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
 $archivePath = Join-Path $temporaryDirectory "$releaseName.zip"
 
 try {
     New-Item -ItemType Directory -Path $temporaryDirectory | Out-Null
-    Write-Host "Téléchargement du runtime PHP Desktop officiel..."
-    Invoke-WebRequest -Uri $releaseUrl -OutFile $archivePath
+    if ([string]::IsNullOrWhiteSpace($RuntimeDirectory)) {
+        Write-Host "Téléchargement du runtime PHP Desktop officiel..."
+        Invoke-WebRequest -Uri $releaseUrl -OutFile $archivePath
 
-    $extractionDirectory = Join-Path $temporaryDirectory "runtime"
-    Expand-Archive -LiteralPath $archivePath -DestinationPath $extractionDirectory
+        $extractionDirectory = Join-Path $temporaryDirectory "runtime"
+        Expand-Archive -LiteralPath $archivePath -DestinationPath $extractionDirectory
 
-    $executables = @(Get-ChildItem -Path $extractionDirectory -Filter "phpdesktop-chrome.exe" -File -Recurse)
-    if ($executables.Count -ne 1) {
-        throw "Le paquet téléchargé ne contient pas un unique phpdesktop-chrome.exe."
+        $executables = @(Get-ChildItem -Path $extractionDirectory -Filter "phpdesktop-chrome.exe" -File -Recurse)
+        if ($executables.Count -ne 1) {
+            throw "Le paquet téléchargé ne contient pas un unique phpdesktop-chrome.exe."
+        }
+        $packageRoot = $executables[0].Directory.FullName
+    } else {
+        Write-Host "Copie du runtime PHP Desktop existant..."
+        $packageRoot = Join-Path $temporaryDirectory "runtime"
+        New-Item -ItemType Directory -Path $packageRoot | Out-Null
+        & robocopy $RuntimeDirectory $packageRoot /E /COPY:DAT /R:1 /W:1 /XD (Join-Path $RuntimeDirectory "www") (Join-Path $RuntimeDirectory "webcache") /NFL /NDL /NJH /NJS /NP
+        if ($LASTEXITCODE -ge 8) {
+            throw "La copie du runtime PHP Desktop a échoué (robocopy $LASTEXITCODE)."
+        }
     }
 
-    $packageRoot = $executables[0].Directory.FullName
+    if (-not (Test-Path (Join-Path $packageRoot "phpdesktop-chrome.exe") -PathType Leaf)) {
+        throw "Le runtime PHP Desktop ne contient pas phpdesktop-chrome.exe."
+    }
     $webRoot = Join-Path $packageRoot "www"
     $settingsPath = Join-Path $packageRoot "settings.json"
-    if (-not (Test-Path $webRoot -PathType Container) -or -not (Test-Path $settingsPath -PathType Leaf)) {
-        throw "Structure du paquet PHP Desktop inattendue (www ou settings.json manquant)."
+    if (-not (Test-Path $settingsPath -PathType Leaf)) {
+        throw "Structure du paquet PHP Desktop inattendue (settings.json manquant)."
     }
 
     $settings = Get-Content -LiteralPath $settingsPath -Raw | ConvertFrom-Json
@@ -55,7 +79,9 @@ try {
     $settingsJson = ConvertTo-Json -InputObject $settings -Depth 100
     [System.IO.File]::WriteAllText($settingsPath, $settingsJson, [System.Text.UTF8Encoding]::new($false))
 
-    Remove-Item -LiteralPath $webRoot -Recurse -Force
+    if (Test-Path $webRoot) {
+        Remove-Item -LiteralPath $webRoot -Recurse -Force
+    }
     New-Item -ItemType Directory -Path $webRoot | Out-Null
     $stagedProjectFiles = @(
         "app",
@@ -90,6 +116,17 @@ try {
         }
     }
 
+    $vendorSource = Join-Path $projectRoot "vendor"
+    $vendorDestination = Join-Path $webRoot "vendor"
+    if (-not (Test-Path (Join-Path $vendorSource "autoload.php") -PathType Leaf)) {
+        throw "Les dépendances Composer doivent être installées dans vendor avant la construction."
+    }
+    New-Item -ItemType Directory -Path $vendorDestination | Out-Null
+    & robocopy $vendorSource $vendorDestination /E /COPY:DAT /R:1 /W:1 /NFL /NDL /NJH /NJS /NP
+    if ($LASTEXITCODE -ge 8) {
+        throw "La copie des dépendances Composer a échoué (robocopy $LASTEXITCODE)."
+    }
+
     $envPath = Join-Path $webRoot ".env"
     $envContent = [System.IO.File]::ReadAllText((Join-Path $webRoot ".env.example"))
     $envContent = [System.Text.RegularExpressions.Regex]::Replace(
@@ -97,6 +134,18 @@ try {
         "(?m)^APP_ENV=.*$",
         "APP_ENV=local`r`nAPP_DESKTOP=true"
     )
+    $envContent = [System.Text.RegularExpressions.Regex]::Replace($envContent, "(?m)^APP_DEBUG=.*$", "APP_DEBUG=false")
+    $envContent = [System.Text.RegularExpressions.Regex]::Replace($envContent, "(?m)^APP_URL=.*$", "APP_URL=")
+    $envContent = [System.Text.RegularExpressions.Regex]::Replace($envContent, "(?m)^NOTIFICATION_EMAIL_ENABLED=.*$", "NOTIFICATION_EMAIL_ENABLED=false")
+    $jwtBytes = New-Object byte[] 32
+    $randomGenerator = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $randomGenerator.GetBytes($jwtBytes)
+    } finally {
+        $randomGenerator.Dispose()
+    }
+    $jwtSecret = [System.BitConverter]::ToString($jwtBytes).Replace("-", "").ToLowerInvariant()
+    $envContent = [System.Text.RegularExpressions.Regex]::Replace($envContent, "(?m)^JWT_SECRET=.*$", "JWT_SECRET=$jwtSecret")
     [System.IO.File]::WriteAllText($envPath, $envContent, [System.Text.UTF8Encoding]::new($false))
 
     $phpPath = Join-Path $packageRoot "php\php.exe"
@@ -107,13 +156,14 @@ try {
     $phpIniPath = Join-Path $packageRoot "php\php.ini"
     $fileInfoExtension = Join-Path $packageRoot "php\ext\php_fileinfo.dll"
     $mbStringExtension = Join-Path $packageRoot "php\ext\php_mbstring.dll"
-    if (-not (Test-Path $phpIniPath -PathType Leaf) -or -not (Test-Path $fileInfoExtension -PathType Leaf) -or -not (Test-Path $mbStringExtension -PathType Leaf)) {
-        throw "Le runtime PHP Desktop doit fournir php.ini ainsi que les extensions fileinfo et mbstring."
+    $gdExtension = Join-Path $packageRoot "php\ext\php_gd.dll"
+    if (-not (Test-Path $phpIniPath -PathType Leaf) -or -not (Test-Path $fileInfoExtension -PathType Leaf) -or -not (Test-Path $mbStringExtension -PathType Leaf) -or -not (Test-Path $gdExtension -PathType Leaf)) {
+        throw "Le runtime PHP Desktop doit fournir php.ini ainsi que les extensions fileinfo, mbstring et gd."
     }
     $phpIni = [System.IO.File]::ReadAllText($phpIniPath)
     $phpIni = [System.Text.RegularExpressions.Regex]::Replace($phpIni, "(?im)^\s*extension\s*=\s*php_gd2\.dll\s*$", "; extension=php_gd2.dll")
     $phpIni = [System.Text.RegularExpressions.Regex]::Replace($phpIni, "(?im)^\s*extension\s*=\s*php_mysql\.dll\s*$", "; extension=php_mysql.dll")
-    foreach ($extension in @("fileinfo", "mbstring")) {
+    foreach ($extension in @("fileinfo", "mbstring", "gd")) {
         $line = "extension=php_$extension.dll"
         if ($phpIni -match "(?im)^\s*;?\s*extension\s*=\s*php_$extension\.dll\s*$") {
             $phpIni = [System.Text.RegularExpressions.Regex]::Replace(
@@ -132,14 +182,15 @@ try {
     [System.IO.File]::WriteAllText($phpIniPath, $phpIni, [System.Text.UTF8Encoding]::new($false))
 
     $phpModules = @(& $phpPath -m)
-    if ($LASTEXITCODE -ne 0 -or $phpModules -notcontains "pdo_mysql" -or $phpModules -notcontains "fileinfo" -or $phpModules -notcontains "mbstring") {
-        throw "Le runtime PHP Desktop doit charger PDO MySQL, fileinfo et mbstring sans erreur."
+    if ($LASTEXITCODE -ne 0 -or $phpModules -notcontains "pdo_mysql" -or $phpModules -notcontains "fileinfo" -or $phpModules -notcontains "mbstring" -or $phpModules -notcontains "gd") {
+        throw "Le runtime PHP Desktop doit charger PDO MySQL, fileinfo, mbstring et gd sans erreur."
     }
 
     if (-not (Get-Command composer -ErrorAction SilentlyContinue)) {
         throw "Composer est requis pour installer les dépendances dans le paquet."
     }
-    & composer install --working-dir="$webRoot" --no-dev --optimize-autoloader --no-interaction
+    # Composer runs with the host PHP, while the packaged PHP runtime is checked above.
+    & composer install --working-dir="$webRoot" --no-dev --optimize-autoloader --no-interaction --ignore-platform-req=ext-gd
     if ($LASTEXITCODE -ne 0) {
         throw "L'installation des dépendances Composer a échoué."
     }

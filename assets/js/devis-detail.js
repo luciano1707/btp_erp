@@ -11,7 +11,12 @@
         document.getElementById('lien-imprimer').href = base + '/devis/' + id + '/imprimer';
         await charger();
         document.getElementById('btn-envoyer').addEventListener('click', function () { changerStatut('envoye'); });
+        document.getElementById('btn-accepter').addEventListener('click', function () { changerStatut('accepte'); });
+        document.getElementById('btn-refuser').addEventListener('click', function () { changerStatut('refuse'); });
         document.getElementById('btn-facturer').addEventListener('click', facturer);
+        document.getElementById('btn-export-pdf').addEventListener('click', function () {
+            window.exporterDevisPDF(id);
+        });
     });
 
     async function charger() {
@@ -37,13 +42,25 @@
         document.getElementById('t-tva').textContent = Format.ariary(d.montant_tva) + ' (' + Number(d.tva_taux) + '%)';
         document.getElementById('t-ttc').innerHTML = '<strong>' + Format.ariary(d.montant_ttc) + '</strong>';
 
-        document.getElementById('btn-envoyer').hidden = !(R.peutValider && d.statut === 'brouillon');
-        document.getElementById('btn-facturer').hidden = !(R.peutValider && d.statut !== 'refuse');
+        document.getElementById('btn-envoyer').hidden =
+            !(R.peutSoumettre && (d.statut === 'brouillon' || d.statut === 'refuse'));
+        document.getElementById('btn-accepter').hidden = !(R.peutValider && d.statut === 'envoye');
+        document.getElementById('btn-refuser').hidden = !(R.peutValider && d.statut === 'envoye');
+        document.getElementById('btn-facturer').hidden = !(R.peutFacturer && d.statut === 'accepte');
+        document.getElementById('btn-export-pdf').hidden = d.statut !== 'accepte';
+        document.getElementById('lien-imprimer').hidden = d.statut !== 'accepte';
     }
 
     async function changerStatut(statut) {
+        let motif = null;
+        if (statut === 'refuse') {
+            motif = window.prompt('Motif du refus :');
+            if (!motif) { return; }
+        }
         const rep = await Auth.api('/api/v1/devis/' + id + '/statut', { method: 'PUT', body: { statut: statut } });
-        if (rep.ok) { await charger(); } else { alert('Erreur.'); }
+        if (rep.ok) { await charger(); return; }
+        const json = await rep.json().catch(function () { return {}; });
+        alert(json.message || 'Erreur lors du changement de statut.');
     }
 
     async function facturer() {

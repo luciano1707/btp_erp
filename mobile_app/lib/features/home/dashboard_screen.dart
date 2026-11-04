@@ -82,7 +82,7 @@ class DashboardScreen extends StatelessWidget {
                 const SizedBox(height: 5),
                 const Text(
                   'Voici la situation de votre activité.',
-                  style: TextStyle(color: Color(0xFFD3DED8), fontSize: 13),
+                  style: TextStyle(color: Color(0xFFDCEEFF), fontSize: 13),
                 ),
               ],
             ),
@@ -98,7 +98,7 @@ class DashboardScreen extends StatelessWidget {
                   value:
                       '${stats['chantiers_actifs'] ?? '—'} / ${stats['chantiers_total'] ?? '—'}',
                   icon: Icons.construction,
-                  tint: const Color(0xFFE8F0D8),
+                  tint: AppColors.lime,
                 ),
               ),
               const SizedBox(width: 12),
@@ -154,48 +154,57 @@ class DashboardScreen extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 22),
-          if (canViewFinances) _DashboardSection(
-            title: 'Facturé et encaissé',
-            subtitle: 'Six derniers mois · en Ariary',
-            trailing: TextButton(
-              onPressed: () => onOpenTab(3),
-              child: const Text('Finances'),
+          if (canViewFinances)
+            _DashboardSection(
+              title: 'Facturé et encaissé',
+              subtitle: 'Six derniers mois · en Ariary',
+              trailing: TextButton(
+                onPressed: () => onOpenTab(3),
+                child: const Text('Finances'),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ChartLegend(
+                    series: [
+                      ChartSeries(
+                        name: 'Facturé',
+                        color: chartColor(0),
+                        values: const [],
+                      ),
+                      ChartSeries(
+                        name: 'Encaissé',
+                        color: chartColor(1),
+                        values: const [],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  AreaChart(
+                    labels: monthlyStats
+                        .map((item) => item['libelle']?.toString() ?? '')
+                        .toList(),
+                    valueFormatter: (valeur) => formatMontant(valeur.round()),
+                    series: [
+                      ChartSeries(
+                        name: 'Facturé',
+                        color: chartColor(0),
+                        values: monthlyStats
+                            .map((item) => _asDouble(item['facture']))
+                            .toList(),
+                      ),
+                      ChartSeries(
+                        name: 'Encaissé',
+                        color: chartColor(1),
+                        values: monthlyStats
+                            .map((item) => _asDouble(item['encaisse']))
+                            .toList(),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ChartLegend(
-                  series: [
-                    ChartSeries(name: 'Facturé', color: chartColor(0), values: const []),
-                    ChartSeries(name: 'Encaissé', color: chartColor(1), values: const []),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                AreaChart(
-                  labels: monthlyStats
-                      .map((item) => item['libelle']?.toString() ?? '')
-                      .toList(),
-                  valueFormatter: (valeur) => formatMontant(valeur.round()),
-                  series: [
-                    ChartSeries(
-                      name: 'Facturé',
-                      color: chartColor(0),
-                      values: monthlyStats
-                          .map((item) => _asDouble(item['facture']))
-                          .toList(),
-                    ),
-                    ChartSeries(
-                      name: 'Encaissé',
-                      color: chartColor(1),
-                      values: monthlyStats
-                          .map((item) => _asDouble(item['encaisse']))
-                          .toList(),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: 14),
           _DashboardSection(
             title: 'Avancement des chantiers',
@@ -222,62 +231,66 @@ class DashboardScreen extends StatelessWidget {
                   ),
           ),
           const SizedBox(height: 14),
-          if (canViewFinances) _DashboardSection(
-            title: 'CA facturé par chantier',
-            subtitle: 'Répartition du chiffre d’affaires',
-            child: DonutChart(
-              segments: chantierStats
-                  .map(
-                    (item) => DonutSegment(
-                      name: item['nom']?.toString() ?? 'Chantier',
-                      value: _asDouble(item['facture']),
-                    ),
-                  )
-                  .toList(),
-              centerSubLabel: 'CA total',
-              valueFormatter: (valeur) => formatMontant(valeur.round()),
+          if (canViewFinances)
+            _DashboardSection(
+              title: 'CA facturé par chantier',
+              subtitle: 'Répartition du chiffre d’affaires',
+              child: DonutChart(
+                segments: chantierStats
+                    .map(
+                      (item) => DonutSegment(
+                        name: item['nom']?.toString() ?? 'Chantier',
+                        value: _asDouble(item['facture']),
+                      ),
+                    )
+                    .toList(),
+                centerSubLabel: 'CA total',
+                valueFormatter: (valeur) => formatMontant(valeur.round()),
+              ),
             ),
-          ),
           const SizedBox(height: 14),
-          if (canViewFinances) _DashboardSection(
-            title: 'Rentabilité par chantier',
-            subtitle: 'Marge brute après coûts engagés',
-            trailing: TextButton(
-              onPressed: () => onOpenTab(3),
-              child: const Text('Finances'),
-            ),
-            child: chantierStats.isEmpty
-                ? const Text(
-                    'Aucune donnée de rentabilité.',
-                    style: TextStyle(color: AppColors.muted),
-                  )
-                : Column(
-                    children: chantierStats.take(6).map((item) {
-                      final marge = _asDouble(item['marge']);
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          item['nom']?.toString() ?? 'Chantier',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 13),
-                        ),
-                        subtitle: Text(
-                          'Coûts ${formatMontant(item['cout_total'])} · '
-                          '${item['avancement'] ?? 0} % d’avancement',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        trailing: Text(
-                          formatMontant(marge),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            color: marge >= 0 ? AppColors.forest : const Color(0xFF9C422B),
+          if (canViewFinances)
+            _DashboardSection(
+              title: 'Rentabilité par chantier',
+              subtitle: 'Marge brute après coûts engagés',
+              trailing: TextButton(
+                onPressed: () => onOpenTab(3),
+                child: const Text('Finances'),
+              ),
+              child: chantierStats.isEmpty
+                  ? const Text(
+                      'Aucune donnée de rentabilité.',
+                      style: TextStyle(color: AppColors.muted),
+                    )
+                  : Column(
+                      children: chantierStats.take(6).map((item) {
+                        final marge = _asDouble(item['marge']);
+                        return ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(
+                            item['nom']?.toString() ?? 'Chantier',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 13),
                           ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-          ),
+                          subtitle: Text(
+                            'Coûts ${formatMontant(item['cout_total'])} · '
+                            '${item['avancement'] ?? 0} % d’avancement',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                          trailing: Text(
+                            formatMontant(marge),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              color: marge >= 0
+                                  ? AppColors.forest
+                                  : const Color(0xFF9C422B),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+            ),
           const SizedBox(height: 14),
           _DashboardSection(
             title: 'État du stock',
@@ -321,13 +334,17 @@ class _StockPreview extends StatelessWidget {
         style: TextStyle(color: AppColors.muted),
       );
     }
-    final sousSeuil = stock.where((item) => item['sous_seuil'] == true).toList();
-    final sansSeuil = stock
-        .where((item) => item['sous_seuil'] != true && item['seuil_alerte'] != null)
-        .toList()
-      ..sort(
-        (a, b) => _ratio(a).compareTo(_ratio(b)),
-      );
+    final sousSeuil = stock
+        .where((item) => item['sous_seuil'] == true)
+        .toList();
+    final sansSeuil =
+        stock
+            .where(
+              (item) =>
+                  item['sous_seuil'] != true && item['seuil_alerte'] != null,
+            )
+            .toList()
+          ..sort((a, b) => _ratio(a).compareTo(_ratio(b)));
     final lignes = [...sousSeuil, ...sansSeuil].take(5).toList();
 
     return Column(

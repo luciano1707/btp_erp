@@ -6,8 +6,10 @@ use App\Core\Audit;
 use App\Core\Controller;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\ValidationService;
 use App\Models\Facture;
 use App\Models\Paiement;
+use RuntimeException;
 
 /** API des factures et de leurs paiements (Phase 6). */
 final class FactureController extends Controller
@@ -98,19 +100,34 @@ final class FactureController extends Controller
             'mode'    => 'dans:especes,cheque,virement,mobile_money,autre',
         ]);
 
-        (new Paiement())->creer([
+        $paiementId = (new Paiement())->creer([
             'facture_id'         => $id,
             'date_paiement'      => $requete->input('date_paiement') ?: date('Y-m-d'),
             'montant'            => (int) $donnees['montant'],
             'mode'               => $requete->input('mode', 'especes'),
+            'statut'             => 'en_attente',
             'reference_paiement' => $requete->input('reference_paiement') ?: null,
             'cree_par'           => $this->uid($requete),
         ]);
 
-        $modele->recalculerPaiements($id);
+        try {
+            (new ValidationService())->soumettre([
+                'type_operation' => 'paiement',
+                'operation_id' => $paiementId,
+                'soumetteur_id' => $this->uid($requete),
+            ]);
+        } catch (RuntimeException $e) {
+            (new Paiement())->supprimer($paiementId);
+            Response::erreur($e->getMessage(), 409);
+        }
+
         Audit::enregistrer('facture.paiement', 'facture', $id, ['montant' => $donnees['montant']], $this->uid($requete));
 
-        Response::succes((new Facture())->trouverAvecLignes($id), 'Paiement enregistre.', 201);
+        Response::succes(
+            (new Facture())->trouverAvecLignes($id),
+            'Paiement enregistre et soumis a validation.',
+            201
+        );
     }
 
     /** POST /api/v1/factures/{id}/annuler */

@@ -27,7 +27,7 @@ if (!function_exists('e')) {
 
 if (!function_exists('base_url')) {
     /**
-     * URL de base de l'application (sans slash final), issue de APP_URL.
+     * URL de base de l'application (sans slash final).
      */
     function base_url(): string
     {
@@ -35,37 +35,58 @@ if (!function_exists('base_url')) {
             return '';
         }
 
-        return rtrim((string) \App\Core\Env::get('APP_URL', ''), '/');
+        $appUrl = \App\Core\Env::get('APP_URL', '');
+        if ($appUrl !== '' && $appUrl !== null) {
+            return rtrim((string) $appUrl, '/');
+        }
+
+        // Détection automatique depuis la requête (fonctionne avec/sans sous-dossier)
+        $scriptName = $_SERVER['SCRIPT_NAME'] ?? '';
+        $base = rtrim(str_replace('\\', '/', dirname($scriptName)), '/');
+        if ($base === '' || $base === '/') {
+            return '';
+        }
+        return $base;
     }
 }
 
 if (!function_exists('asset')) {
     /**
      * URL absolue vers un fichier statique du dossier assets/, avec cache-busting.
-     * On ajoute ?v=<date de modification> : quand le fichier change, l'URL change,
-     * ce qui force le navigateur a recharger la nouvelle version (fini le cache perime).
-     * Ex: asset('css/app.css') => http://localhost/BTP_ERP/assets/css/app.css?v=1720440000
      */
     function asset(string $chemin): string
     {
         $chemin = ltrim($chemin, '/');
         $version = '';
-        $fichier = dirname(__DIR__, 2) . '/assets/' . $chemin;
+        $racineProjet = dirname(__DIR__, 2);
+        $fichier = $racineProjet . '/assets/' . $chemin;
         if (is_file($fichier)) {
             $version = '?v=' . filemtime($fichier);
         }
-        return base_url() . '/assets/' . $chemin . $version;
+
+        $base = base_url();
+        if ($base === '') {
+            return '/assets/' . $chemin . $version;
+        }
+        return $base . '/assets/' . $chemin . $version;
     }
 }
 
 if (!function_exists('url')) {
     /**
      * URL absolue vers une route de l'application.
-     * Ex: url('/connexion') => http://localhost/BTP_ERP/connexion
      */
     function url(string $chemin = ''): string
     {
-        return base_url() . '/' . ltrim($chemin, '/');
+        $base = base_url();
+        $chemin = ltrim($chemin, '/');
+        if ($chemin === '') {
+            return $base === '' ? '/' : $base . '/';
+        }
+        if ($base === '') {
+            return '/' . $chemin;
+        }
+        return $base . '/' . $chemin;
     }
 }
 

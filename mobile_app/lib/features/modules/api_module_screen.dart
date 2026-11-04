@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/api_client.dart';
@@ -28,6 +30,24 @@ class _ApiModuleScreenState extends State<ApiModuleScreen> {
   List<Map<String, dynamic>> _items = [];
   bool _loading = true;
   String? _error;
+  Timer? _searchDebounce;
+  int _loadGeneration = 0;
+
+  List<Map<String, dynamic>> get _visibleItems {
+    final query = _normalizeSearch(_search.text.trim());
+    if (query.isEmpty || widget.module.searchable) return _items;
+    return _items.where((item) {
+      final values = [
+        ...item.entries.expand(
+          (entry) => [entry.key, ..._searchableValues(entry.value)],
+        ),
+        labelStatut(item['statut']),
+        _urgenceLabel(item['urgence']),
+        _formatRecordDate(item['date_demande']),
+      ];
+      return _normalizeSearch(values.join(' ')).contains(query);
+    }).toList();
+  }
 
   @override
   void initState() {
@@ -37,30 +57,63 @@ class _ApiModuleScreenState extends State<ApiModuleScreen> {
 
   @override
   void dispose() {
+    _searchDebounce?.cancel();
     _search.dispose();
     super.dispose();
   }
 
-  Future<void> _load() async {
+  Future<void> _load({String? searchOverride}) async {
+    _searchDebounce?.cancel();
+    final generation = ++_loadGeneration;
+    final query = (searchOverride ?? _search.text).trim();
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      final suffix = _search.text.trim().isEmpty
+      final suffix = !widget.module.searchable || query.isEmpty
           ? ''
-          : '?recherche=${Uri.encodeQueryComponent(_search.text.trim())}';
+          : '?recherche=${Uri.encodeQueryComponent(query)}';
       final response = await widget.api.getData(
         '${widget.module.endpoint}$suffix',
       );
       final records = response is List
           ? response
           : (response as Map)['elements'] as List? ?? [];
+      if (!mounted || generation != _loadGeneration) return;
       _items = List<Map<String, dynamic>>.from(records);
     } catch (error) {
-      _error = error.toString();
+      if (generation == _loadGeneration) _error = error.toString();
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _loadGeneration) {
+        setState(() => _loading = false);
+      }
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    if (!widget.module.searchable) {
+      setState(() {});
+      return;
+    }
+    _loadGeneration++;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(
+      const Duration(milliseconds: 300),
+      () => _load(searchOverride: value),
+    );
+  }
+
+  Future<void> _searchNow() async {
+    if (widget.module.searchable) {
+      _searchDebounce?.cancel();
+      await _load();
+    } else if (mounted) {
+      setState(() {});
     }
   }
 
@@ -82,17 +135,20 @@ class _ApiModuleScreenState extends State<ApiModuleScreen> {
           child: TextField(
             controller: _search,
             textInputAction: TextInputAction.search,
-            onSubmitted: (_) => _load(),
+            onChanged: _onSearchChanged,
+            onSubmitted: (_) => _searchNow(),
             decoration: InputDecoration(
               labelText: 'Rechercher',
               prefixIcon: const Icon(Icons.search),
               suffixIcon: IconButton(
-                onPressed: _load,
+                onPressed: _searchNow,
                 icon: const Icon(Icons.arrow_forward),
               ),
             ),
           ),
         ),
+        if (_loading && _items.isNotEmpty)
+          const LinearProgressIndicator(minHeight: 2),
         Expanded(
           child: _loading && _items.isEmpty
               ? const Center(child: CircularProgressIndicator())
@@ -100,28 +156,42 @@ class _ApiModuleScreenState extends State<ApiModuleScreen> {
               ? ErrorPanel(message: _error!, onRetry: _load)
               : RefreshIndicator(
                   onRefresh: _load,
-                  child: _items.isEmpty
+                  child: _visibleItems.isEmpty
                       ? ListView(
                           children: [
                             SizedBox(
                               height: MediaQuery.sizeOf(context).height * .28,
                             ),
-                            const Center(child: Text('Aucun élément.')),
+                            Center(
+                              child: Text(
+                                _search.text.trim().isNotEmpty &&
+                                        widget.module.searchable
+                                    ? 'Aucun résultat pour cette recherche.'
+                                    : _items.isEmpty
+                                    ? 'Aucun élément.'
+                                    : 'Aucun résultat pour cette recherche.',
+                              ),
+                            ),
                           ],
+                        )
+                      : widget.module.id == 'demandes-materiel'
+                      ? _DemandesMaterielTable(
+                          items: _visibleItems,
+                          onOpen: _open,
                         )
                       : ListView.separated(
                           padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
-                          itemCount: _items.length,
+                          itemCount: _visibleItems.length,
                           separatorBuilder: (_, _) => const SizedBox(height: 8),
                           itemBuilder: (context, index) => _ModuleRecordTile(
-                            item: _items[index],
+                            item: _visibleItems[index],
                             module: widget.module,
-                            onTap: () => _open(_items[index]),
+                            onTap: () => _open(_visibleItems[index]),
                             onEdit: _canEditRecord
-                                ? () => _edit(_items[index])
+                                ? () => _edit(_visibleItems[index])
                                 : null,
                             onDelete: _canDeleteRecord
-                                ? () => _deleteRecord(_items[index])
+                                ? () => _deleteRecord(_visibleItems[index])
                                 : null,
                           ),
                         ),
@@ -132,6 +202,26 @@ class _ApiModuleScreenState extends State<ApiModuleScreen> {
   );
 
   Future<void> _edit([Map<String, dynamic>? item]) async {
+    var initial = item;
+    if (item != null &&
+        widget.module.hasLines &&
+        item['lignes'] is! List &&
+        item['id'] != null) {
+      try {
+        initial = Map<String, dynamic>.from(
+          await widget.api.getData('${widget.module.endpoint}/${item['id']}')
+              as Map,
+        );
+      } catch (error) {
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(error.toString())));
+        }
+        return;
+      }
+    }
+    if (!mounted) return;
     final saved = await Navigator.push<bool>(
       context,
       MaterialPageRoute<bool>(
@@ -139,7 +229,7 @@ class _ApiModuleScreenState extends State<ApiModuleScreen> {
           api: widget.api,
           module: widget.module,
           role: widget.role,
-          initial: item,
+          initial: initial,
         ),
       ),
     );
@@ -167,6 +257,7 @@ class _ApiModuleScreenState extends State<ApiModuleScreen> {
   /// on les gere depuis la fiche detail.
   bool get _canEditRecord =>
       widget.module.canEdit(widget.role) &&
+      widget.module.updatable &&
       widget.module.fields.isNotEmpty &&
       widget.module.workflow != 'achat' &&
       widget.module.workflow != 'devis' &&
@@ -207,6 +298,182 @@ class _ApiModuleScreenState extends State<ApiModuleScreen> {
   }
 }
 
+class _DemandesMaterielTable extends StatelessWidget {
+  const _DemandesMaterielTable({required this.items, required this.onOpen});
+
+  final List<Map<String, dynamic>> items;
+  final ValueChanged<Map<String, dynamic>> onOpen;
+
+  @override
+  Widget build(BuildContext context) => ListView(
+    padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+    children: [
+      Card(
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 18, 16, 10),
+              child: Text(
+                'Liste des demandes de matériel',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+              ),
+            ),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: DataTable(
+                headingRowColor: WidgetStatePropertyAll(
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+                ),
+                headingRowHeight: 48,
+                dataRowMinHeight: 64,
+                dataRowMaxHeight: 88,
+                columnSpacing: 20,
+                horizontalMargin: 16,
+                columns: const [
+                  DataColumn(label: Text('N°')),
+                  DataColumn(label: Text('Objet')),
+                  DataColumn(label: Text('Chantier')),
+                  DataColumn(label: Text('Demandeur')),
+                  DataColumn(label: Text('Urgence')),
+                  DataColumn(label: Text('Statut')),
+                  DataColumn(label: Text('Date')),
+                  DataColumn(label: Text('Actions')),
+                ],
+                rows: [
+                  for (final item in items)
+                    DataRow(
+                      cells: [
+                        DataCell(
+                          _TableValue(item['numero'] ?? item['id'], width: 120),
+                          onTap: () => onOpen(item),
+                        ),
+                        DataCell(
+                          _TableValue(
+                            item['objet'],
+                            width: 145,
+                            emphasized: true,
+                          ),
+                          onTap: () => onOpen(item),
+                        ),
+                        DataCell(
+                          _TableValue(item['chantier_nom'], width: 150),
+                          onTap: () => onOpen(item),
+                        ),
+                        DataCell(
+                          _TableValue(
+                            [item['demandeur_prenom'], item['demandeur_nom']]
+                                .where(
+                                  (value) =>
+                                      value != null &&
+                                      value.toString().trim().isNotEmpty,
+                                )
+                                .join(' '),
+                            width: 135,
+                          ),
+                          onTap: () => onOpen(item),
+                        ),
+                        DataCell(
+                          _TableValue(
+                            _urgenceLabel(item['urgence']),
+                            width: 95,
+                          ),
+                          onTap: () => onOpen(item),
+                        ),
+                        DataCell(
+                          _StatutPuce(statut: item['statut']?.toString() ?? ''),
+                          onTap: () => onOpen(item),
+                        ),
+                        DataCell(
+                          _TableValue(
+                            _formatRecordDate(item['date_demande']),
+                            width: 100,
+                          ),
+                          onTap: () => onOpen(item),
+                        ),
+                        DataCell(
+                          TextButton(
+                            onPressed: () => onOpen(item),
+                            child: const Text('Détail'),
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+}
+
+class _TableValue extends StatelessWidget {
+  const _TableValue(this.value, {required this.width, this.emphasized = false});
+
+  final dynamic value;
+  final double width;
+  final bool emphasized;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: width,
+    child: Text(
+      value?.toString().trim().isNotEmpty == true ? value.toString() : '—',
+      maxLines: 3,
+      overflow: TextOverflow.ellipsis,
+      style: TextStyle(
+        fontWeight: emphasized ? FontWeight.w700 : FontWeight.normal,
+      ),
+    ),
+  );
+}
+
+String _urgenceLabel(dynamic value) => switch (value?.toString()) {
+  'normale' => 'Normale',
+  'urgente' => 'Urgente',
+  'tres_urgente' => 'Très urgente',
+  'basse' => 'Basse',
+  final other when other != null && other.isNotEmpty => _readableRecordValue(
+    other,
+  ),
+  _ => '—',
+};
+
+Iterable<String> _searchableValues(dynamic value) sync* {
+  if (value is Map) {
+    for (final entry in value.entries) {
+      yield entry.key.toString();
+      yield* _searchableValues(entry.value);
+    }
+  } else if (value is Iterable) {
+    for (final item in value) {
+      yield* _searchableValues(item);
+    }
+  } else if (value != null) {
+    yield value.toString();
+  }
+}
+
+String _normalizeSearch(String value) {
+  final normalized = StringBuffer();
+  for (final rune in value.toLowerCase().runes) {
+    normalized.write(switch (rune) {
+      0x00e0 || 0x00e1 || 0x00e2 || 0x00e3 || 0x00e4 || 0x00e5 => 'a',
+      0x00e8 || 0x00e9 || 0x00ea || 0x00eb => 'e',
+      0x00ec || 0x00ed || 0x00ee || 0x00ef => 'i',
+      0x00f2 || 0x00f3 || 0x00f4 || 0x00f5 || 0x00f6 => 'o',
+      0x00f9 || 0x00fa || 0x00fb || 0x00fc => 'u',
+      0x00e7 => 'c',
+      0x0153 => 'oe',
+      _ => String.fromCharCode(rune),
+    });
+  }
+  return normalized.toString();
+}
+
 class _ModuleRecordTile extends StatelessWidget {
   const _ModuleRecordTile({
     required this.item,
@@ -224,24 +491,8 @@ class _ModuleRecordTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title =
-        item['nom'] ??
-        item['designation'] ??
-        item['reference'] ??
-        item['libelle'] ??
-        item['code'] ??
-        'Élément ${item['id'] ?? ''}';
-    final subtitle =
-        [
-              item['statut'],
-              item['localisation'],
-              item['client_nom'],
-              item['fournisseur_nom'],
-              item['date_achat'],
-              item['date_facture'],
-            ]
-            .where((value) => value != null && value.toString().isNotEmpty)
-            .join(' · ');
+    final title = _moduleRecordTitle(module, item);
+    final subtitle = _moduleRecordSubtitle(module, item, title);
     final statut = item['statut']?.toString();
     final hasActions = onEdit != null || onDelete != null;
 
@@ -259,7 +510,7 @@ class _ModuleRecordTile extends StatelessWidget {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFE8F0D8),
+                  color: AppColors.lime,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(module.icon, color: AppColors.forest, size: 21),
@@ -278,10 +529,7 @@ class _ModuleRecordTile extends StatelessWidget {
                         color: AppColors.ink,
                       ),
                     ),
-                    if (statut != null && statut.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      _StatutPuce(statut: statut),
-                    ] else if (subtitle.isNotEmpty) ...[
+                    if (subtitle.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
                         subtitle,
@@ -292,6 +540,10 @@ class _ModuleRecordTile extends StatelessWidget {
                           color: AppColors.muted,
                         ),
                       ),
+                    ],
+                    if (statut != null && statut.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      _StatutPuce(statut: statut),
                     ],
                   ],
                 ),
@@ -348,6 +600,195 @@ class _ModuleRecordTile extends StatelessWidget {
       ),
     );
   }
+}
+
+String _moduleRecordTitle(AppModule module, Map<String, dynamic> item) {
+  String first(List<String> keys) => _firstRecordValue(item, keys);
+  final employeeName = [
+    item['prenom']?.toString().trim(),
+    item['nom']?.toString().trim(),
+  ].where((value) => value != null && value.isNotEmpty).join(' ');
+
+  final title = switch (module.id) {
+    'employes' =>
+      first(['display_name', 'nom_complet']).isNotEmpty
+          ? first(['display_name', 'nom_complet'])
+          : employeeName.isNotEmpty
+          ? employeeName
+          : first(['matricule', 'nom']),
+    'chantiers' => first(['nom', 'code']),
+    'achats' ||
+    'devis' ||
+    'factures' => first(['reference', 'numero', 'client_nom']),
+    'stock' || 'materiaux' || 'engins' => first(['designation', 'nom', 'code']),
+    'demandes-materiel' || 'rfi' => first(['objet', 'question', 'numero']),
+    'rapports-journaliers' => _joinRecordValues([
+      item['chantier_nom'],
+      _formatRecordDate(item['date_rapport']),
+    ]),
+    'depenses' => first(['libelle', 'numero', 'categorie']),
+    'budgets' => _joinRecordValues([item['chantier_nom'], item['annee']]),
+    'qualite' => first([
+      'type_inspection',
+      'lot_nom',
+      'chantier_nom',
+      'numero',
+    ]),
+    'securite' => _joinRecordValues([
+      _readableRecordValue(item['type_observation']),
+      item['lieu'],
+    ]),
+    'incidents' => _joinRecordValues([
+      _readableRecordValue(item['type_incident']),
+      item['lieu'],
+    ]),
+    'validations' => _joinRecordValues([
+      _readableRecordValue(item['type_operation']),
+      item['operation_id'] == null ? null : '#${item['operation_id']}',
+    ]),
+    'journal' => _joinRecordValues([
+      _readableRecordValue(item['action']),
+      _readableRecordValue(item['entite']),
+    ]),
+    _ => first([
+      'display_name',
+      'nom_complet',
+      'nom',
+      'designation',
+      'reference',
+      'numero',
+      'objet',
+      'libelle',
+      'titre',
+      'code',
+      'chantier_nom',
+    ]),
+  };
+
+  if (title.isNotEmpty) return title;
+  final id = item['id']?.toString();
+  if (id == null || id.isEmpty) return module.title;
+  return switch (module.id) {
+    'demandes-materiel' => 'Demande de matériel #$id',
+    'rapports-journaliers' => 'Rapport journalier #$id',
+    'depenses' => 'Dépense #$id',
+    'budgets' => 'Budget #$id',
+    'rfi' => 'Demande d’information #$id',
+    'qualite' => 'Inspection qualité #$id',
+    'securite' => 'Observation sécurité #$id',
+    'incidents' => 'Incident #$id',
+    'validations' => 'Approbation #$id',
+    _ => 'Enregistrement #$id',
+  };
+}
+
+String _moduleRecordSubtitle(
+  AppModule module,
+  Map<String, dynamic> item,
+  String title,
+) {
+  final values = switch (module.id) {
+    'employes' => [item['matricule'], item['poste']],
+    'chantiers' => [item['code'], item['localisation'], item['client_nom']],
+    'achats' => [
+      item['fournisseur_nom'],
+      item['chantier_nom'],
+      _formatRecordDate(item['date_achat']),
+    ],
+    'devis' => [
+      item['client_nom'],
+      item['chantier_nom'],
+      _formatRecordDate(item['date_devis']),
+    ],
+    'factures' => [
+      item['client_nom'],
+      item['chantier_nom'],
+      _formatRecordDate(item['date_facture']),
+    ],
+    'demandes-materiel' => [
+      item['numero'],
+      item['chantier_nom'],
+      _readableRecordValue(item['urgence']),
+      _formatRecordDate(item['date_demande']),
+    ],
+    'rapports-journaliers' => [
+      _formatRecordDate(item['date_rapport']),
+      item['chef_nom'],
+      item['avancement_pct'] == null ? null : '${item['avancement_pct']} %',
+    ],
+    'depenses' => [
+      item['numero'],
+      item['chantier_nom'],
+      _readableRecordValue(item['categorie']),
+      _formatRecordDate(item['date_depense']),
+    ],
+    'budgets' => [item['code'], 'Année ${item['annee'] ?? ''}'],
+    'rfi' => [
+      item['numero'],
+      item['chantier_nom'],
+      _readableRecordValue(item['priorite']),
+      _formatRecordDate(item['date_limite']),
+    ],
+    'qualite' => [
+      item['chantier_nom'],
+      item['lot_nom'],
+      _formatRecordDate(item['date_inspection']),
+    ],
+    'securite' => [
+      item['chantier_nom'],
+      _formatRecordDate(item['date_observation']),
+      item['declarant_nom'],
+    ],
+    'incidents' => [
+      item['chantier_nom'],
+      _formatRecordDate(item['date_incident']),
+      _readableRecordValue(item['gravite']),
+      item['declarant_nom'],
+    ],
+    'validations' => [
+      item['numero'],
+      item['soumetteur_nom'],
+      _formatRecordDate(item['date_soumission']),
+    ],
+    'journal' => [item['description'], _formatRecordDate(item['cree_le'])],
+    _ => [
+      item['localisation'],
+      item['client_nom'],
+      item['fournisseur_nom'],
+      _formatRecordDate(item['date_achat']),
+      _formatRecordDate(item['date_facture']),
+    ],
+  };
+  return _joinRecordValues(
+    values.where((value) {
+      final text = value?.toString().trim() ?? '';
+      return text.isNotEmpty && text != title;
+    }),
+  );
+}
+
+String _firstRecordValue(Map<String, dynamic> item, List<String> keys) {
+  for (final key in keys) {
+    final value = item[key]?.toString().trim() ?? '';
+    if (value.isNotEmpty) return value;
+  }
+  return '';
+}
+
+String _joinRecordValues(Iterable<dynamic> values) => values
+    .map((value) => value?.toString().trim() ?? '')
+    .where((value) => value.isNotEmpty)
+    .join(' · ');
+
+String _formatRecordDate(dynamic value) {
+  final date = value?.toString().trim() ?? '';
+  return date.isEmpty ? '' : formatDate(date);
+}
+
+String _readableRecordValue(dynamic value) {
+  final text = value?.toString().trim().replaceAll('_', ' ') ?? '';
+  if (text.isEmpty) return '';
+  return '${text[0].toUpperCase()}${text.substring(1)}';
 }
 
 class _StatutPuce extends StatelessWidget {
@@ -416,14 +857,62 @@ class _ModuleFormScreenState extends State<ModuleFormScreen> {
         _remoteOptions[field.name] = _loadOptions(field.remoteSource!);
       }
     }
-    if (widget.module.hasLines) _addLine();
+    if (widget.module.lineMode == ModuleLineMode.materiel) {
+      _remoteOptions['materiau_id'] = _loadOptions('materiaux');
+    }
+    if (widget.module.hasLines) {
+      final existingLines = widget.initial?['lignes'];
+      if (existingLines is List && existingLines.isNotEmpty) {
+        for (final item in existingLines.whereType<Map>()) {
+          _addLine();
+          final row = _lines.last;
+          final values = switch (widget.module.lineMode) {
+            ModuleLineMode.document => {
+              'designation': item['designation'],
+              'quantite': item['quantite'],
+              'prix_unitaire': item['prix_unitaire'],
+            },
+            ModuleLineMode.materiel => {
+              'materiau_id': item['materiau_id'],
+              'designation': item['designation'],
+              'quantite_demandee': item['quantite_demandee'],
+              'unite': item['unite'],
+            },
+            ModuleLineMode.budget => {
+              'rubrique': item['rubrique'],
+              'montant_prevu': item['montant_prevu'],
+            },
+          };
+          for (final entry in values.entries) {
+            row[entry.key]!.text = entry.value?.toString() ?? '';
+          }
+        }
+      } else {
+        _addLine();
+      }
+    }
   }
 
-  void _addLine() => _lines.add({
-    'designation': TextEditingController(),
-    'quantite': TextEditingController(text: '1'),
-    'prix_unitaire': TextEditingController(),
-  });
+  void _addLine() {
+    final controllers = switch (widget.module.lineMode) {
+      ModuleLineMode.document => {
+        'designation': TextEditingController(),
+        'quantite': TextEditingController(text: '1'),
+        'prix_unitaire': TextEditingController(),
+      },
+      ModuleLineMode.materiel => {
+        'materiau_id': TextEditingController(),
+        'designation': TextEditingController(),
+        'quantite_demandee': TextEditingController(text: '1'),
+        'unite': TextEditingController(text: 'U'),
+      },
+      ModuleLineMode.budget => {
+        'rubrique': TextEditingController(),
+        'montant_prevu': TextEditingController(),
+      },
+    };
+    _lines.add(controllers);
+  }
 
   Future<List<Map<String, dynamic>>> _loadOptions(String endpoint) async {
     final response = await widget.api.getData('$endpoint?limite=200');
@@ -610,56 +1099,212 @@ class _ModuleFormScreenState extends State<ModuleFormScreen> {
     );
   }
 
-  Widget _lineWidget(int index, Map<String, TextEditingController> row) =>
-      Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Column(
-          children: [
-            TextFormField(
-              controller: row['designation'],
-              decoration: InputDecoration(
-                labelText: 'Désignation ${index + 1}',
-              ),
-              validator: index == 0
-                  ? (value) => value == null || value.trim().isEmpty
-                        ? 'Une ligne est requise.'
-                        : null
+  Widget _lineWidget(int index, Map<String, TextEditingController> row) {
+    if (widget.module.lineMode == ModuleLineMode.materiel) {
+      return _materielLineWidget(index, row);
+    }
+    if (widget.module.lineMode == ModuleLineMode.budget) {
+      return _budgetLineWidget(index, row);
+    }
+    return _documentLineWidget(index, row);
+  }
+
+  Widget _materielLineWidget(
+    int index,
+    Map<String, TextEditingController> row,
+  ) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Column(
+      children: [
+        FutureBuilder<List<Map<String, dynamic>>>(
+          future: _remoteOptions['materiau_id'],
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return InputDecorator(
+                decoration: const InputDecoration(labelText: 'Matériau'),
+                child: const Text('Liste des matériaux indisponible'),
+              );
+            }
+            if (!snapshot.hasData) {
+              return const Padding(
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: LinearProgressIndicator(),
+              );
+            }
+            final materials = snapshot.data!;
+            final values = materials
+                .map((item) => item['id'].toString())
+                .toSet();
+            return DropdownButtonFormField<String>(
+              initialValue: values.contains(row['materiau_id']!.text)
+                  ? row['materiau_id']!.text
                   : null,
-            ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: row['quantite'],
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
+              decoration: InputDecoration(labelText: 'Matériau ${index + 1}'),
+              items: materials
+                  .map(
+                    (item) => DropdownMenuItem(
+                      value: item['id'].toString(),
+                      child: Text(
+                        (item['designation'] ?? item['nom'] ?? 'Matériau')
+                            .toString(),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    decoration: const InputDecoration(labelText: 'Quantité'),
-                  ),
+                  )
+                  .toList(),
+              validator: index == 0
+                  ? (value) =>
+                        value == null ? 'Sélectionnez un matériau.' : null
+                  : null,
+              onChanged: (value) {
+                row['materiau_id']!.text = value ?? '';
+                final selected = materials.where(
+                  (item) => item['id'].toString() == value,
+                );
+                if (selected.isNotEmpty) {
+                  row['designation']!.text =
+                      selected.first['designation']?.toString() ?? '';
+                  row['unite']!.text =
+                      selected.first['unite']?.toString() ?? 'U';
+                }
+              },
+            );
+          },
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: row['quantite_demandee'],
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextFormField(
-                    controller: row['prix_unitaire'],
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      labelText: 'Prix unitaire (Ar)',
-                    ),
-                  ),
-                ),
-                if (_lines.length > 1)
-                  IconButton(
-                    tooltip: 'Supprimer la ligne',
-                    onPressed: () => setState(() {
-                      _lines.removeAt(index);
-                    }),
-                    icon: const Icon(Icons.delete_outline),
-                  ),
-              ],
+                decoration: const InputDecoration(labelText: 'Quantité'),
+                validator: index == 0
+                    ? (value) => (num.tryParse(value ?? '') ?? 0) <= 0
+                          ? 'Quantité invalide.'
+                          : null
+                    : null,
+              ),
             ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextFormField(
+                controller: row['unite'],
+                decoration: const InputDecoration(labelText: 'Unité'),
+              ),
+            ),
+            if (_lines.length > 1)
+              IconButton(
+                tooltip: 'Supprimer la ligne',
+                onPressed: () => setState(() {
+                  final removed = _lines.removeAt(index);
+                  for (final controller in removed.values) {
+                    controller.dispose();
+                  }
+                }),
+                icon: const Icon(Icons.delete_outline),
+              ),
           ],
         ),
-      );
+      ],
+    ),
+  );
+
+  Widget _budgetLineWidget(
+    int index,
+    Map<String, TextEditingController> row,
+  ) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Row(
+      children: [
+        Expanded(
+          child: TextFormField(
+            controller: row['rubrique'],
+            decoration: InputDecoration(labelText: 'Rubrique ${index + 1}'),
+            validator: index == 0
+                ? (value) => value == null || value.trim().isEmpty
+                      ? 'Une rubrique est requise.'
+                      : null
+                : null,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: TextFormField(
+            controller: row['montant_prevu'],
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Montant prévu (Ar)'),
+          ),
+        ),
+        if (_lines.length > 1)
+          IconButton(
+            tooltip: 'Supprimer la ligne',
+            onPressed: () => setState(() {
+              final removed = _lines.removeAt(index);
+              for (final controller in removed.values) {
+                controller.dispose();
+              }
+            }),
+            icon: const Icon(Icons.delete_outline),
+          ),
+      ],
+    ),
+  );
+
+  Widget _documentLineWidget(
+    int index,
+    Map<String, TextEditingController> row,
+  ) => Padding(
+    padding: const EdgeInsets.only(top: 8),
+    child: Column(
+      children: [
+        TextFormField(
+          controller: row['designation'],
+          decoration: InputDecoration(labelText: 'Désignation ${index + 1}'),
+          validator: index == 0
+              ? (value) => value == null || value.trim().isEmpty
+                    ? 'Une ligne est requise.'
+                    : null
+              : null,
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: row['quantite'],
+                keyboardType: const TextInputType.numberWithOptions(
+                  decimal: true,
+                ),
+                decoration: const InputDecoration(labelText: 'Quantité'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: TextFormField(
+                controller: row['prix_unitaire'],
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Prix unitaire (Ar)',
+                ),
+              ),
+            ),
+            if (_lines.length > 1)
+              IconButton(
+                tooltip: 'Supprimer la ligne',
+                onPressed: () => setState(() {
+                  final removed = _lines.removeAt(index);
+                  for (final controller in removed.values) {
+                    controller.dispose();
+                  }
+                }),
+                icon: const Icon(Icons.delete_outline),
+              ),
+          ],
+        ),
+      ],
+    ),
+  );
 
   Future<void> _save() async {
     if (!_form.currentState!.validate()) return;
@@ -678,16 +1323,44 @@ class _ModuleFormScreenState extends State<ModuleFormScreen> {
       }
     }
     if (widget.module.hasLines) {
-      body['lignes'] = _lines
-          .where((line) => line['designation']!.text.trim().isNotEmpty)
-          .map(
-            (line) => {
-              'designation': line['designation']!.text.trim(),
-              'quantite': num.tryParse(line['quantite']!.text) ?? 1,
-              'prix_unitaire': int.tryParse(line['prix_unitaire']!.text) ?? 0,
-            },
-          )
-          .toList();
+      body['lignes'] = switch (widget.module.lineMode) {
+        ModuleLineMode.document =>
+          _lines
+              .where((line) => line['designation']!.text.trim().isNotEmpty)
+              .map(
+                (line) => {
+                  'designation': line['designation']!.text.trim(),
+                  'quantite': num.tryParse(line['quantite']!.text) ?? 1,
+                  'prix_unitaire':
+                      int.tryParse(line['prix_unitaire']!.text) ?? 0,
+                },
+              )
+              .toList(),
+        ModuleLineMode.materiel =>
+          _lines
+              .where((line) => line['materiau_id']!.text.trim().isNotEmpty)
+              .map(
+                (line) => {
+                  'materiau_id': int.tryParse(line['materiau_id']!.text),
+                  'designation': line['designation']!.text.trim(),
+                  'unite': line['unite']!.text.trim(),
+                  'quantite_demandee':
+                      num.tryParse(line['quantite_demandee']!.text) ?? 0,
+                },
+              )
+              .toList(),
+        ModuleLineMode.budget =>
+          _lines
+              .where((line) => line['rubrique']!.text.trim().isNotEmpty)
+              .map(
+                (line) => {
+                  'rubrique': line['rubrique']!.text.trim(),
+                  'montant_prevu':
+                      num.tryParse(line['montant_prevu']!.text) ?? 0,
+                },
+              )
+              .toList(),
+      };
       if (widget.module.workflow == 'devis' ||
           widget.module.workflow == 'facture') {
         body['tva_taux'] = 20;
@@ -751,14 +1424,29 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
               as List;
       return {...widget.item, 'mouvements': movements};
     }
-    return Map<String, dynamic>.from(
+    final record = Map<String, dynamic>.from(
       await widget.api.getData('${widget.module.endpoint}/${widget.item['id']}')
           as Map,
     );
+    if (widget.module.workflow == 'depense' &&
+        ['directeur', 'comptable'].contains(widget.role)) {
+      final response = await widget.api.getData(
+        'validations?type_operation=depense&operation_id=${widget.item['id']}',
+      );
+      final rows = response is List
+          ? response
+          : (response as Map)['elements'] as List? ?? [];
+      final validation = rows.whereType<Map>().firstOrNull;
+      record['role_attendu'] =
+          validation?['role_attendu'] ??
+          (record['statut'] == 'brouillon' ? 'comptable' : null);
+    }
+    return record;
   }
 
   bool get _canEditRecord =>
       widget.module.canEdit(widget.role) &&
+      widget.module.updatable &&
       widget.module.fields.isNotEmpty &&
       widget.module.workflow != 'achat' &&
       widget.module.workflow != 'devis' &&
@@ -824,9 +1512,32 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
           return const Center(child: CircularProgressIndicator());
         }
         final data = snapshot.data!;
+        final decisionActions = _headerDecisionActions(data);
         return ListView(
           padding: const EdgeInsets.all(16),
           children: [
+            if (decisionActions.isNotEmpty)
+              Card(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Actions',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 10),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 8,
+                        children: decisionActions,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             if (widget.module.workflow == 'chantier')
               _chantierDetails(data)
             else
@@ -840,14 +1551,22 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                   style: TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
-              ...(data['lignes'] as List).whereType<Map>().map(
-                (line) => ListTile(
-                  title: Text('${line['designation'] ?? 'Ligne'}'),
-                  subtitle: Text(
+              ...(data['lignes'] as List).whereType<Map>().map((line) {
+                final subtitle = switch (widget.module.lineMode) {
+                  ModuleLineMode.materiel =>
+                    '${line['quantite_demandee'] ?? ''} ${line['unite'] ?? ''}',
+                  ModuleLineMode.budget =>
+                    'Prévu : ${line['montant_prevu'] ?? 0} Ar · Engagé : ${line['montant_engage'] ?? 0} Ar',
+                  ModuleLineMode.document =>
                     '${line['quantite'] ?? ''} × ${line['prix_unitaire'] ?? ''} Ar',
+                };
+                return ListTile(
+                  title: Text(
+                    '${line['designation'] ?? line['rubrique'] ?? 'Ligne'}',
                   ),
-                ),
-              ),
+                  subtitle: Text(subtitle),
+                );
+              }),
             ],
             if (data['paiements'] is List)
               ...(data['paiements'] as List).whereType<Map>().map(
@@ -893,7 +1612,8 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
               ),
             ],
             const SizedBox(height: 16),
-            if (_hasWorkflowAction(data)) _workflowButtons(data),
+            if (_hasWorkflowAction(data) && decisionActions.isEmpty)
+              _workflowButtons(data),
           ],
         );
       },
@@ -902,14 +1622,80 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
 
   bool _hasWorkflowAction(Map<String, dynamic> data) =>
       switch (widget.module.workflow) {
-        'achat' => data['statut'] != 'recu' && data['statut'] != 'annule',
-        'devis' => data['statut'] != 'refuse',
-        'facture' => data['statut'] != 'annulee',
+        'achat' =>
+          widget.role == 'magasinier' &&
+              data['statut'] != 'recu' &&
+              data['statut'] != 'annule',
+        'devis' => widget.role == 'comptable' && data['statut'] != 'refuse',
+        'facture' => widget.role == 'comptable' && data['statut'] != 'annulee',
+        'demande_materiel' =>
+          (data['statut'] == 'en_attente' && widget.role == 'directeur') ||
+              (data['statut'] == 'valide' && widget.role == 'magasinier'),
+        'rapport' => data['statut'] == 'brouillon',
+        'depense' =>
+          (data['statut'] == 'rejete' &&
+                  widget.module.canCreate(widget.role)) ||
+              (['en_attente', 'brouillon'].contains(data['statut']) &&
+                  data['role_attendu'] == widget.role),
+        'rfi' => data['statut'] == 'ouvert',
+        'validation' =>
+          data['statut'] == 'en_attente' && data['role_attendu'] == widget.role,
         _ => false,
       };
 
   bool get _canViewFinancials =>
       widget.role == 'directeur' || widget.role == 'comptable';
+
+  List<Widget> _headerDecisionActions(Map<String, dynamic> data) {
+    final canDecideMaterialRequest =
+        widget.module.workflow == 'demande_materiel' &&
+        data['statut'] == 'en_attente' &&
+        widget.role == 'directeur' &&
+        widget.module.canWorkflow(widget.role);
+    final canDecideExpense =
+        widget.module.workflow == 'depense' &&
+        ['en_attente', 'brouillon'].contains(data['statut']) &&
+        data['role_attendu'] == widget.role;
+    final canDecideValidation =
+        widget.module.workflow == 'validation' &&
+        data['role_attendu'] == widget.role;
+
+    if (canDecideMaterialRequest || canDecideExpense || canDecideValidation) {
+      final isExpense = widget.module.workflow == 'depense';
+      final isValidation = widget.module.workflow == 'validation';
+      final rejectField = isExpense
+          ? 'motif_rejet'
+          : isValidation
+          ? 'motif'
+          : 'motif_refus';
+      final rejectTitle = isExpense
+          ? 'Refuser la dépense'
+          : 'Refuser la demande';
+
+      return [
+        FilledButton.icon(
+          onPressed: () => _action(
+            'POST',
+            isExpense || isValidation ? 'valider' : 'approuver',
+            {},
+          ),
+          icon: const Icon(Icons.check_circle_outline),
+          label: const Text('Approuver'),
+        ),
+        OutlinedButton.icon(
+          onPressed: () => _reasonDialog(
+            title: rejectTitle,
+            field: rejectField,
+            action: isExpense ? 'rejeter' : 'refuser',
+          ),
+          icon: const Icon(Icons.cancel_outlined),
+          label: const Text('Refuser'),
+        ),
+      ];
+    }
+
+    return [];
+  }
 
   Widget _recordDetails(Map<String, dynamic> data) {
     final fieldsByName = {
@@ -996,7 +1782,7 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
                   children: [
                     CircleAvatar(
                       radius: 26,
-                      backgroundColor: const Color(0xFFE8F0D8),
+                      backgroundColor: AppColors.lime,
                       child: Icon(
                         widget.module.icon,
                         color: AppColors.forest,
@@ -1487,7 +2273,9 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
   }
 
   Widget _workflowButtons(Map<String, dynamic> data) {
-    if (!widget.module.canWrite(widget.role)) return const SizedBox.shrink();
+    if (!widget.module.canWorkflow(widget.role)) {
+      return const SizedBox.shrink();
+    }
     return Column(
       children: switch (widget.module.workflow) {
         'achat' => [
@@ -1537,9 +2325,111 @@ class _RecordDetailScreenState extends State<RecordDetailScreen> {
               label: const Text('Annuler la facture'),
             ),
         ],
+        'demande_materiel' => [
+          if (data['statut'] == 'valide' && widget.role == 'magasinier')
+            FilledButton.icon(
+              onPressed: () => _action('POST', 'traiter', {}),
+              icon: const Icon(Icons.inventory_2_outlined),
+              label: const Text('Traiter la demande'),
+            ),
+        ],
+        'depense' => [
+          if (data['statut'] == 'rejete' &&
+              widget.module.canCreate(widget.role))
+            FilledButton.icon(
+              onPressed: () => _action('POST', 'soumettre', {}),
+              icon: const Icon(Icons.send_outlined),
+              label: const Text('Soumettre à nouveau'),
+            ),
+        ],
+        'rapport' => [
+          FilledButton.icon(
+            onPressed: () => _action('POST', 'soumettre', {}),
+            icon: const Icon(Icons.send_outlined),
+            label: const Text('Soumettre le rapport'),
+          ),
+        ],
+        'rfi' => [
+          FilledButton.icon(
+            onPressed: _replyRfi,
+            icon: const Icon(Icons.reply_outlined),
+            label: const Text('Répondre à la RFI'),
+          ),
+        ],
+        'validation' => [],
         _ => <Widget>[],
       },
     );
+  }
+
+  Future<void> _reasonDialog({
+    required String title,
+    required String field,
+    required String action,
+  }) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: TextField(
+          controller: controller,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(labelText: 'Motif obligatoire'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                Navigator.pop(context, controller.text.trim());
+              }
+            },
+            child: const Text('Confirmer'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reason != null) {
+      await _action('POST', action, {field: reason});
+    }
+  }
+
+  Future<void> _replyRfi() async {
+    final controller = TextEditingController();
+    final reply = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Répondre à la RFI'),
+        content: TextField(
+          controller: controller,
+          minLines: 3,
+          maxLines: 6,
+          decoration: const InputDecoration(labelText: 'Réponse'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (controller.text.trim().isNotEmpty) {
+                Navigator.pop(context, controller.text.trim());
+              }
+            },
+            child: const Text('Envoyer'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reply != null) await _action('POST', 'repondre', {'reponse': reply});
   }
 
   Future<void> _changeQuoteStatus(Map<String, dynamic> data) async {

@@ -18,9 +18,15 @@ ob_start();
         <p class="sous-titre description-liste">Suivez vos projets, leurs budgets, leurs clients et leur avancement.</p>
         <p class="sous-titre" id="compteur">Chargement&hellip;</p>
     </div>
-    <?php if ($peutCreer): ?>
-        <a class="bouton bouton-primaire" href="<?= e(url('/chantiers/nouveau')) ?>">+ Nouveau chantier</a>
-    <?php endif; ?>
+    <div class="actions-groupe">
+        <?php if ($peutCreer): ?>
+            <a class="bouton bouton-primaire" href="<?= e(url('/chantiers/nouveau')) ?>">+ Nouveau chantier</a>
+        <?php endif; ?>
+        <div class="groupe-export">
+            <button class="bouton bouton-export" type="button" onclick="exporter('pdf')">📄 PDF</button>
+            <button class="bouton bouton-export bouton-export-excel" type="button" onclick="exporter('xlsx')">📊 Excel</button>
+        </div>
+    </div>
 </section>
 
 <div class="barre-recherche">

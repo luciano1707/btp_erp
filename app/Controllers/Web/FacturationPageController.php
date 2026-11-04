@@ -6,6 +6,8 @@ use App\Core\Controller;
 use App\Core\Access;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\ValidationService;
+use App\Models\Devis;
 
 /** Pages web des devis et factures (Phase 6). */
 final class FacturationPageController extends Controller
@@ -58,16 +60,28 @@ final class FacturationPageController extends Controller
     {
         $role = $r->auth['role'] ?? null;
         Response::vue('facturation.detail_devis', [
-            'titre'       => 'Detail devis',
-            'id'          => (int) $r->params['id'],
-            'peutValider' => Access::autorise($role, 'devis', 'validate'),
+            'titre'         => 'Detail devis',
+            'id'            => (int) $r->params['id'],
+            'peutSoumettre' => Access::autorise($role, 'devis', 'edit'),
+            'peutValider'   => $role === 'directeur',
+            'peutFacturer'  => Access::autorise($role, 'devis', 'create'),
         ]);
     }
 
-    /** GET /devis/{id}/imprimer : version imprimable du devis. */
+    /** GET /devis/{id}/imprimer : version imprimable, reservee aux devis valides. */
     public function imprimerDevis(Request $r): void
     {
-        Response::vue('facturation.imprimer_devis', ['titre' => 'Devis', 'id' => (int) $r->params['id']]);
+        $id = (int) $r->params['id'];
+        $devis = (new Devis())->trouver($id);
+        if ($devis === null) {
+            Response::vue('erreurs.404', [], 404);
+        }
+        $valide = ($devis['statut'] ?? '') === 'accepte'
+            || (new ValidationService())->estValidee('devis', $id);
+        if (!$valide) {
+            Response::vue('erreurs.403', [], 403);
+        }
+        Response::vue('facturation.imprimer_devis', ['titre' => 'Devis', 'id' => $id]);
     }
 
     public function detailFacture(Request $r): void

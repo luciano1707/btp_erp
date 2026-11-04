@@ -18,6 +18,9 @@ Le paquet genere contient son propre PHP et son navigateur ; ne les lancez pas
 separement. L'ordinateur doit aussi avoir acces a la base configuree dans
 `www\.env`. Par defaut, le script de construction configure MySQL local sur
 `127.0.0.1:3306`, base `btp_erp`, utilisateur `root` sans mot de passe.
+Le paquet desactive le mode debug et les notifications e-mail externes par
+defaut, et genere une cle JWT aleatoire. Configurez un serveur SMTP dans
+`www\.env` avant d'utiliser les OTP ou les notifications par e-mail.
 
 ## Construire un nouveau paquet
 
@@ -28,6 +31,13 @@ Depuis PowerShell, a la racine du depot :
 
 ```powershell
 .\desktop\build.ps1 -RunMigrations
+```
+
+Pour reconstruire a partir d'un runtime PHP Desktop deja present localement
+sans le telecharger a nouveau :
+
+```powershell
+.\desktop\build.ps1 -RuntimeDirectory "desktop\build\DigitalChantier-<date>"
 ```
 
 Le paquet est cree dans un nouveau dossier
